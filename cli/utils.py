@@ -7,29 +7,25 @@ import os
 
 console = Console()
 
-def get_trigger_time() -> str:
-    """提示用户输入触发时间"""
-    now = datetime.now()
-    time_options = [
-        f"A股当前时间 ({now.strftime('%Y-%m-%d %H:%M:%S')})",
-        # f"今天美股盘前 ({now.strftime('%Y-%m-%d')} 15:30:00，夏令时美东时间03:30:00)",
-        # f"今天美股盘前 ({now.strftime('%Y-%m-%d')} 16:30:00，冬令时美东时间04:30:00)"
-    ]
-    
-    time_choice = questionary.select(
-        "选择触发时间:（其他时间请期待后续版本）",
-        choices=time_options,
-        style=questionary.Style([
-            ("text", "fg:white"),
-            ("highlighted", "fg:green bold"),
-            ("pointer", "fg:green"),
-        ])
-    ).ask()
-    
-    if time_choice == time_options[0]:
-        return f"{now.strftime('%Y-%m-%d %H:%M:%S')}"
-    else:
-        return f"{now.strftime('%Y-%m-%d %H:%M:%S')}"
+def get_trigger_time(now: Optional[datetime] = None) -> str:
+    """提示用户输入触发时间；传入 now 则直接使用当前时间（非交互模式）"""
+    if now is None:
+        now = datetime.now()
+        time_options = [
+            f"A股当前时间 ({now.strftime('%Y-%m-%d %H:%M:%S')})",
+        ]
+        time_choice = questionary.select(
+            "选择触发时间:（其他时间请期待后续版本）",
+            choices=time_options,
+            style=questionary.Style([
+                ("text", "fg:white"),
+                ("highlighted", "fg:green bold"),
+                ("pointer", "fg:green"),
+            ])
+        ).ask()
+        if time_choice is None:
+            return f"{now.strftime('%Y-%m-%d %H:%M:%S')}"
+    return f"{now.strftime('%Y-%m-%d %H:%M:%S')}"
 
 def validate_tushare_connection():
     """验证Tushare连接"""
@@ -187,7 +183,7 @@ def get_market_selection() -> str:
     else:
         return None
 
-def get_trigger_time_for_market(market: str) -> str:
+def get_trigger_time_for_market(market: str, use_now: bool = False) -> str:
     """根据市场获取对应的触发时间，并设置环境变量"""
     # 设置环境变量
     os.environ['CONTEST_TRADE_MARKET'] = market
@@ -195,7 +191,7 @@ def get_trigger_time_for_market(market: str) -> str:
     # 根据市场获取触发时间
     if market == "CN-Stock":
         # A股市场使用当前交易日
-        return get_trigger_time()
+        return get_trigger_time(now=datetime.now() if use_now else None)
     elif market == "US-Stock":
         # 美股市场使用美东时区时间
         from datetime import datetime, timezone, timedelta

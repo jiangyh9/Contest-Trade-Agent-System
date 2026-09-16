@@ -907,12 +907,17 @@ def display_detailed_report(final_state: Dict):
 @app.command()
 def run(
     market: Optional[str] = typer.Option(None, "--market", "-m", help="选择市场 (CN-Stock/US-Stock)"),
+    now: bool = typer.Option(False, "--now", "-n", help="使用当前时间，跳过交互式时间选择（适合远程/定时运行）"),
 ):
     """运行ContestTrade分析"""
 
     # 获取市场选择
     if not market:
-        market = get_market_selection()
+        if now:
+            market = "CN-Stock"
+            console.print(f"[yellow]--now 模式下默认市场: {market}[/yellow]")
+        else:
+            market = get_market_selection()
     
     # 验证市场选择
     if not market:
@@ -927,7 +932,7 @@ def run(
     os.environ['CONTEST_TRADE_MARKET'] = market
     
     # 根据市场获取对应的触发时间
-    trigger_time = get_trigger_time_for_market(market)
+    trigger_time = get_trigger_time_for_market(market, use_now=now)
     
     # 验证触发时间
     if not trigger_time:
