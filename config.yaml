@@ -2,7 +2,7 @@
 tushare_key: "" 
 
 #YOUR_BOCHA_KEY
-bocha_key: "" 
+bocha_key: "<EMPTY_KEY>" 
 
 #YOUR_SERP_KEY
 serp_key: "" 
@@ -57,23 +57,20 @@ finnhub_key: ""
 llm:
   provider: "openai"
   base_url: "https://api.deepseek.com"
-  #YOUR_DEEPSEEK_API_KEY
-  api_key: null 
-  model_name: "deepseek-chat"
+  api_key: "<EMPTY_KEY>"
+  model_name: "deepseek-flash"
 
 llm_thinking:
   provider: "openai"
   base_url: "https://api.deepseek.com"
-  #YOUR_DEEPSEEK_API_KEY
-  api_key: null 
-  model_name: "deepseek-reasoner"
+  api_key: "<EMPTY_KEY>"
+  model_name: "deepseek-flash"
 
 vlm:
   provider: "openai"
-  base_url: "https://api.stepfun.com/v1"
-  #YOUR_STEPFUN_API_KEY
-  api_key: null 
-  model_name: "step-1o-turbo-vision"
+  base_url: "https://api.deepseek.com"
+  api_key: "<EMPTY_KEY>"
+  model_name: "deepseek-flash"
 
 
 data_agents_config:

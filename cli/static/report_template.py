@@ -205,36 +205,50 @@ class FinalReportGenerator:
 """
         
         if valid_signals:
-            report_content += f"### ✅ {self.get_text('推荐投资信号', 'Recommended Investment Signals')} ({len(valid_signals)}{self.get_text('个', '')})\n\n"
-            
-            for i, signal in enumerate(valid_signals, 1):
-                symbol_name = signal.get('symbol_name', 'N/A')
-                symbol_code = signal.get('symbol_code', 'N/A')
-                action = signal.get('action', 'N/A')
-                agent_id = signal.get('agent_id', 'N/A')
-                
-                report_content += f"#### {i}. {symbol_name} ({symbol_code})\n\n"
-                report_content += f"- **{self.get_text('投资动作', 'Investment Action')}**: {action}\n"
-                report_content += f"- **{self.get_text('分析来源', 'Analysis Source')}**: Research Agent {agent_id}\n"
-                
-                # 证据详情
-                evidence_list = signal.get('evidence_list', [])
-                if evidence_list:
-                    report_content += f"- **{self.get_text('支撑证据', 'Supporting Evidence')}** ({len(evidence_list)}{self.get_text('项', '')}):\n"
-                    for j, evidence in enumerate(evidence_list, 1):
-                        desc = evidence.get('description', 'N/A')
-                        source = evidence.get('from_source', 'N/A')
-                        time = evidence.get('time', 'N/A')
-                        report_content += f"  {j}. **{desc}** ({self.get_text('来源', 'Source')}: {source}, {self.get_text('时间', 'Time')}: {time})\n"
-                
-                # 风险提示
-                limitations = signal.get('limitations', [])
-                if limitations:
-                    report_content += f"- **{self.get_text('风险提示', 'Risk Warnings')}**:\n"
-                    for limitation in limitations:
-                        report_content += f"  - {limitation}\n"
-                
-                report_content += "\n"
+            # 按风险偏好分组
+            profile_order = ["风险偏好者", "稳健投资者", "激进套利者", "防御套利者"]
+            grouped_signals = {profile: [] for profile in profile_order}
+            for signal in valid_signals:
+                profile = signal.get('risk_profile', '未指定')
+                if profile not in grouped_signals:
+                    grouped_signals[profile] = []
+                grouped_signals[profile].append(signal)
+
+            for profile in list(grouped_signals.keys()):
+                if not grouped_signals[profile]:
+                    continue
+                report_content += f"### ✅ {profile} ({len(grouped_signals[profile])}{self.get_text('个', '')})\n\n"
+
+                for i, signal in enumerate(grouped_signals[profile], 1):
+                    symbol_name = signal.get('symbol_name', 'N/A')
+                    symbol_code = signal.get('symbol_code', 'N/A')
+                    action = signal.get('action', 'N/A')
+                    agent_id = signal.get('agent_id', 'N/A')
+                    probability = signal.get('probability', 'N/A')
+
+                    report_content += f"#### {i}. {symbol_name} ({symbol_code})\n\n"
+                    report_content += f"- **{self.get_text('投资动作', 'Investment Action')}**: {action}\n"
+                    report_content += f"- **{self.get_text('分析来源', 'Analysis Source')}**: Research Agent {agent_id}\n"
+                    report_content += f"- **{self.get_text('置信度', 'Confidence')}**: {probability}\n"
+
+                    # 证据详情
+                    evidence_list = signal.get('evidence_list', [])
+                    if evidence_list:
+                        report_content += f"- **{self.get_text('支撑证据', 'Supporting Evidence')}** ({len(evidence_list)}{self.get_text('项', '')}):\n"
+                        for j, evidence in enumerate(evidence_list, 1):
+                            desc = evidence.get('description', 'N/A')
+                            source = evidence.get('from_source', 'N/A')
+                            time = evidence.get('time', 'N/A')
+                            report_content += f"  {j}. **{desc}** ({self.get_text('来源', 'Source')}: {source}, {self.get_text('时间', 'Time')}: {time})\n"
+
+                    # 风险提示
+                    limitations = signal.get('limitations', [])
+                    if limitations:
+                        report_content += f"- **{self.get_text('风险提示', 'Risk Warnings')}**:\n"
+                        for limitation in limitations:
+                            report_content += f"  - {limitation}\n"
+
+                    report_content += "\n"
         else:
             report_content += f"### ❌ {self.get_text('暂无推荐投资信号', 'No Recommended Investment Signals')}\n\n"
             report_content += self.get_text("本次分析未发现具有明确投资机会的信号。\n\n", "No signals with clear investment opportunities were found in this analysis.\n\n")

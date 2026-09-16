@@ -288,6 +288,9 @@ class SimpleTradeCompany:
             action = re.search(r"<action>(.*?)</action>", signal_block, flags=re.DOTALL).group(1).strip()
             symbol_code = re.search(r"<symbol_code>(.*?)</symbol_code>", signal_block, flags=re.DOTALL).group(1).strip()
             symbol_name = re.search(r"<symbol_name>(.*?)</symbol_name>", signal_block, flags=re.DOTALL).group(1).strip()
+
+            risk_profile_match = re.search(r"<risk_profile>(.*?)</risk_profile>", signal_block, flags=re.DOTALL)
+            risk_profile = risk_profile_match.group(1).strip() if risk_profile_match else "未指定"
             
             # 解析evidence_list
             evidence_list_str = re.search(r"<evidence_list>(.*?)</evidence_list>", signal_block, flags=re.DOTALL).group(1)
@@ -325,9 +328,10 @@ class SimpleTradeCompany:
             return {
                 "thinking": thinking,
                 "has_opportunity": has_opportunity,
-                "action": action,   
+                "action": action,
                 "symbol_code": symbol_code,
                 "symbol_name": symbol_name,
+                "risk_profile": risk_profile,
                 "evidence_list": evidence_list,
                 "limitations": limitations,
                 "probability": probability,

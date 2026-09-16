@@ -243,6 +243,7 @@ prompt_for_research_invest_output_format = """
 <action>xxx</action>  # buy or sell
 <symbol_code>xxx</symbol_code>     # such as 600519.SH or TSLA
 <symbol_name>xxx</symbol_name>  # such as 贵州茅台 or tesla
+<risk_profile>风险偏好者</risk_profile>  # 必须与你的服务群体一致：风险偏好者 / 稳健投资者 / 激进套利者 / 防御套利者
 <evidence_list>        # no more than 20 evidences
 <evidence>xxx</evidence>   # a detailed evidence description, including convincing logical inferences which support your suggestion. About 100 words.
 <time>xxx</time>           # evidence time

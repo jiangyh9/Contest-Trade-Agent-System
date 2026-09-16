@@ -64,7 +64,13 @@ def validate_llm_connection():
         test_messages = [
             {"role": "user", "content": "请回复'连接测试成功'，不要添加任何其他内容。"}
         ]
-        result = GLOBAL_LLM.run(test_messages, max_tokens=1, temperature=0.1, max_retries=0)
+        result = GLOBAL_LLM.run(
+            test_messages,
+            max_tokens=32,
+            temperature=0.1,
+            max_retries=0,
+            thinking=False,
+        )
         if result and hasattr(result, 'content') and result.content:
             console.print(f"✅ [green]LLM连接成功[/green] - 模型: {GLOBAL_LLM.model_name}")
             return True
