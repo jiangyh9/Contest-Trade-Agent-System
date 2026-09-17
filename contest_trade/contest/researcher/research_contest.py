@@ -21,11 +21,11 @@ sys.path.append(str(PROJECT_ROOT))
 from models.llm_model import GLOBAL_LLM
 from utils.market_manager import GLOBAL_MARKET_MANAGER
 from config.config import cfg
-from research_contest_types import SignalData, ResearchContestResult
-from research_data_manager import ResearchDataManager
-from research_predictor import ResearchPredictor
-from research_weight_optimizer import ResearchWeightOptimizer
-from research_signal_judger import ResearchSignalJudger
+from contest_trade.contest.researcher.research_contest_types import SignalData, ResearchContestResult
+from contest_trade.contest.researcher.research_data_manager import ResearchDataManager
+from contest_trade.contest.researcher.research_predictor import ResearchPredictor
+from contest_trade.contest.researcher.research_weight_optimizer import ResearchWeightOptimizer
+from contest_trade.contest.researcher.research_signal_judger import ResearchSignalJudger
 
 logger = logging.getLogger(__name__)
 

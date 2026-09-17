@@ -13,6 +13,9 @@ from config.config import cfg, PROJECT_ROOT
 from agents.data_analysis_agent import DataAnalysisAgent, DataAnalysisAgentConfig, DataAnalysisAgentInput
 from agents.research_agent import ResearchAgent, ResearchAgentConfig, ResearchAgentInput
 from utils.market_manager import GLOBAL_MARKET_MANAGER
+from contest.data_analyst.data_contest_types import FactorData
+from contest.knockout.data_knockout import DataKnockoutContest
+from contest.knockout.research_knockout import ResearchKnockoutContest
 
 # 统一的状态定义
 class CompanyState(TypedDict):
@@ -46,23 +49,72 @@ class SimpleTradeCompany:
         with open(belief_list_path, 'r', encoding='utf-8') as f:
             belief_list = json.load(f)
 
+        # 读取不同风险画像的持仓期配置
+        research_contest_cfg = getattr(cfg, "researcher_contest_config", {}) or {}
+        holding_period_map = research_contest_cfg.get("holding_period_by_risk_profile", {})
+
         for agent_config_idx, belief in enumerate(belief_list):
+            risk_profile = self._extract_risk_profile_from_belief(belief)
+            holding_period = holding_period_map.get(risk_profile, 1)
             custom_config = ResearchAgentConfig(
                 agent_name=f"agent_{agent_config_idx}",
                 belief=belief,
+                holding_period=holding_period,
             )
             self.research_agents[agent_config_idx] = ResearchAgent(custom_config)
 
+        # 淘汰赛配置
+        data_contest_cfg = getattr(cfg, "data_contest_config", {}) or {}
+        research_contest_cfg = getattr(cfg, "researcher_contest_config", {}) or {}
+
+        self.data_knockout = DataKnockoutContest(
+            enabled=data_contest_cfg.get("enabled", True),
+            history_window_days=data_contest_cfg.get("history_window_days", 5),
+            champion_ratio=data_contest_cfg.get("champion_ratio", 0.30),
+            eliminated_ratio=data_contest_cfg.get("eliminated_ratio", 0.30),
+            bench_revival_interval=data_contest_cfg.get("bench_revival_interval", 2),
+            eliminated_revival_interval=data_contest_cfg.get("eliminated_revival_interval", 5),
+        )
+        self.data_knockout.register_agents(cfg.data_agents_config)
+
+        self.research_knockout = ResearchKnockoutContest(
+            enabled=research_contest_cfg.get("enabled", True),
+            history_window_days=research_contest_cfg.get("window_m", 5),
+            champion_ratio=research_contest_cfg.get("champion_ratio", 0.30),
+            eliminated_ratio=research_contest_cfg.get("eliminated_ratio", 0.30),
+            bench_revival_interval=research_contest_cfg.get("bench_revival_interval", 2),
+            eliminated_revival_interval=research_contest_cfg.get("eliminated_revival_interval", 5),
+            fallback_to_judge=research_contest_cfg.get("fallback_to_judge", True),
+            num_judgers=research_contest_cfg.get("num_judgers", 3),
+        )
+        self.research_knockout.register_agents(belief_list)
+
     # LangGraph节点函数
     async def run_data_agents_step(self, state: CompanyState, config: RunnableConfig) -> CompanyState:
-        """运行Data Agents步骤"""
+        """运行Data Agents步骤（集成淘汰赛）"""
         trigger_time = state["trigger_time"]
-        
-        print("🚀 开始并发运行Data Agents...")
+        current_date = trigger_time.split(' ')[0]
+
+        # 根据淘汰赛状态选择本轮应运行的 Data Agent
+        active_agent_names = self.data_knockout.select_active_agents(
+            current_date, cfg.data_agents_config
+        )
+        active_agent_ids = [
+            idx for idx, agent in self.data_agents.items()
+            if agent.config.agent_name in active_agent_names
+        ]
+
+        print(f"🚀 Data Knockout - 本轮运行 {len(active_agent_ids)}/{len(self.data_agents)} 个Data Agents...")
+        dispatch_custom_event(
+            name="data_knockout_active_agents",
+            data={"active": active_agent_names, "total": len(self.data_agents)},
+            config=config,
+        )
         
         # 创建并发任务
         agent_tasks = []
-        for agent_id, agent in self.data_agents.items():
+        for agent_id in active_agent_ids:
+            agent = self.data_agents[agent_id]
             task = self._run_single_data_agent(agent_id, agent, trigger_time, config)
             agent_tasks.append(task)
         
@@ -76,32 +128,91 @@ class SimpleTradeCompany:
             if result:
                 all_factors.append(result["factor"])
                 all_events.extend(result["events"])
-        
-        print(f"✅ Data Agents完成，有效结果: {len(all_factors)}")
+
+        # 更新淘汰赛状态（基于历史收益）
+        contest_factors = [
+            FactorData(
+                agent_name=f.agent_name,
+                trigger_time=f.trigger_time,
+                context_string=f.context_string,
+            )
+            for f in all_factors if hasattr(f, "agent_name")
+        ]
+        try:
+            data_contest_summary = await self.data_knockout.update_after_run(
+                current_date, contest_factors
+            )
+        except Exception as e:
+            print(f"⚠️ Data Knockout 更新状态失败: {e}")
+            data_contest_summary = {"enabled": self.data_knockout.enabled, "error": str(e)}
+
+        # 过滤传给 Research Agent 的 factor：默认保留活跃 agent，可选只保留 CHAMPION
+        filtered_factors = self.data_knockout.filter_factors(
+            contest_factors, active_agent_names, top_k=None
+        )
+        # 转回原始 factor 对象输出
+        active_factor_names = {f.agent_name for f in filtered_factors}
+        final_factors = [f for f in all_factors if getattr(f, "agent_name", None) in active_factor_names]
+
+        print(f"✅ Data Agents完成，有效结果: {len(all_factors)}，传给研究层: {len(final_factors)}")
+        dispatch_custom_event(
+            name="data_knockout_tiers_updated",
+            data={
+                "enabled": self.data_knockout.enabled,
+                "tiers": self.data_knockout.get_status().get("tiers", {}),
+                "summary": data_contest_summary,
+            },
+            config=config,
+        )
         
         # 更新状态
         all_events_state = state["all_events"].copy()
         all_events_state.extend(all_events)
         
         step_results = state["step_results"].copy()
-        step_results["data_team"] = {"factors_count": len(all_factors), "events_count": len(all_events)}
+        step_results["data_team"] = {
+            "factors_count": len(all_factors),
+            "events_count": len(all_events),
+            "active_count": len(active_agent_ids),
+            "data_contest": data_contest_summary,
+            "data_tiers": self.data_knockout.get_status().get("tiers", {}),
+        }
         
         return {
-            "data_factors": all_factors,
+            "data_factors": final_factors,
             "all_events": all_events_state,
             "step_results": step_results
         }
 
     async def run_research_agents_step(self, state: CompanyState, config: RunnableConfig) -> CompanyState:
-        """运行Research Agents步骤"""
+        """运行Research Agents步骤（集成淘汰赛）"""
         trigger_time = state["trigger_time"]
+        current_date = trigger_time.split(' ')[0]
         data_factors = state["data_factors"]
+
+        # 读取 belief 以注册/分组 Research Agent
+        belief_list_path = PROJECT_ROOT / cfg.research_agent_config["belief_list_path"]
+        with open(belief_list_path, 'r', encoding='utf-8') as f:
+            belief_list = json.load(f)
+
+        # 根据淘汰赛状态选择本轮应运行的 Research Agent
+        active_agent_names = self.research_knockout.select_active_agents(current_date, belief_list)
+        active_agent_ids = [
+            idx for idx, agent in self.research_agents.items()
+            if agent.config.agent_name in active_agent_names
+        ]
         
-        print("🚀 开始并发运行Research Agents...")
+        print(f"🚀 Research Knockout - 本轮运行 {len(active_agent_ids)}/{len(self.research_agents)} 个Research Agents...")
+        dispatch_custom_event(
+            name="research_knockout_active_agents",
+            data={"active": active_agent_names, "total": len(self.research_agents)},
+            config=config,
+        )
         
         # 创建并发任务
         agent_tasks = []
-        for agent_id, agent in self.research_agents.items():
+        for agent_id in active_agent_ids:
+            agent = self.research_agents[agent_id]
             task = self._run_single_research_agent(agent_id, agent, trigger_time, data_factors, config)
             agent_tasks.append(task)
         
@@ -115,18 +226,50 @@ class SimpleTradeCompany:
             if result and result["signals"]:
                 all_signals.extend(result["signals"])
                 all_events.extend(result["events"])
+
+        # 更新淘汰赛状态并过滤信号
+        try:
+            current_signal_data = self._signals_to_signal_data(all_signals)
+            research_contest_summary = await self.research_knockout.update_after_run(
+                current_date, current_signal_data, trigger_time
+            )
+            # 默认保留 CHAMPION / BENCH 层信号，丢弃 ELIMINATED
+            final_signals = self.research_knockout.filter_signals(
+                all_signals, allowed_tiers=["CHAMPION", "BENCH"], min_score=None
+            )
+        except Exception as e:
+            print(f"⚠️ Research Knockout 更新状态失败: {e}")
+            research_contest_summary = {"enabled": self.research_knockout.enabled, "error": str(e)}
+            final_signals = all_signals
         
-        print(f"✅ Research Agents完成，有效信号总数: {len(all_signals)}")
+        print(f"✅ Research Agents完成，本轮信号: {len(all_signals)}，进入最终报告: {len(final_signals)}")
+        dispatch_custom_event(
+            name="research_knockout_tiers_updated",
+            data={
+                "enabled": self.research_knockout.enabled,
+                "tiers": self.research_knockout.get_status().get("tiers", {}),
+                "summary": research_contest_summary,
+                "final_signals_count": len(final_signals),
+            },
+            config=config,
+        )
         
         # 更新状态
         all_events_state = state["all_events"].copy()
         all_events_state.extend(all_events)
         
         step_results = state["step_results"].copy()
-        step_results["research_team"] = {"signals_count": len(all_signals), "events_count": len(all_events)}
+        step_results["research_team"] = {
+            "signals_count": len(all_signals),
+            "events_count": len(all_events),
+            "active_count": len(active_agent_ids),
+            "final_signals_count": len(final_signals),
+            "research_contest": research_contest_summary,
+            "research_tiers": self.research_knockout.get_status().get("tiers", {}),
+        }
         
         return {
-            "research_signals": all_signals,
+            "research_signals": final_signals,
             "all_events": all_events_state,
             "step_results": step_results
         }
@@ -162,6 +305,15 @@ class SimpleTradeCompany:
         return {
             "step_results": step_results
         }
+
+    @staticmethod
+    def _extract_risk_profile_from_belief(belief: str) -> str:
+        """从 belief 文本中提取风险画像关键词"""
+        profiles = ["风险偏好者", "稳健投资者", "激进套利者", "防御套利者"]
+        for profile in profiles:
+            if profile in belief:
+                return profile
+        return "default"
 
     # 辅助函数
     async def _run_single_data_agent(self, agent_id: int, agent, trigger_time: str, config: RunnableConfig):
@@ -247,11 +399,20 @@ class SimpleTradeCompany:
             
             # 为每个信号添加agent信息，最多取5个信号
             valid_signals = []
+            agent_belief = getattr(agent.config, "belief", "")
+            agent_background = ""
+            if isinstance(agent_output, dict):
+                agent_background = agent_output.get("background_information", "")
+            elif hasattr(agent_output, "background_information"):
+                agent_background = agent_output.background_information
             for i, signal in enumerate(signals[:5]):
                 if signal:
                     signal["agent_id"] = agent_id
                     signal["agent_name"] = agent.config.agent_name
                     signal["signal_index"] = i + 1
+                    signal["trigger_time"] = trigger_time
+                    signal["belief"] = agent_belief
+                    signal["background_information"] = agent_background
                     valid_signals.append(signal)
             signals = valid_signals
         
@@ -339,6 +500,30 @@ class SimpleTradeCompany:
         except Exception as e:
             print(f"Error parsing single signal block: {e}")
             return None
+
+    def _signals_to_signal_data(self, signals: List[Dict]) -> Dict[str, object]:
+        """把解析后的信号字典转换为 Research Contest 用的 SignalData 对象"""
+        from contest.researcher.research_contest_types import SignalData
+        result = {}
+        for signal in signals:
+            agent_name = signal.get("agent_name")
+            if not agent_name:
+                continue
+            result[agent_name] = SignalData(
+                agent_name=agent_name,
+                trigger_time=signal.get("trigger_time", ""),
+                thinking=signal.get("thinking", ""),
+                has_opportunity=signal.get("has_opportunity", "no"),
+                action=signal.get("action", "buy"),
+                symbol_code=signal.get("symbol_code", ""),
+                symbol_name=signal.get("symbol_name", ""),
+                evidence_list=signal.get("evidence_list", []),
+                limitations=signal.get("limitations", []),
+                probability=signal.get("probability", "0"),
+                belief=signal.get("belief", ""),
+                background_information=signal.get("background_information", ""),
+            )
+        return result
 
     # LangGraph工作流创建
     def create_company_workflow(self):

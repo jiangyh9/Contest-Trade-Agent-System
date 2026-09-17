@@ -13,7 +13,7 @@ import joblib
 from pathlib import Path
 from typing import List, Dict, Optional, Union
 
-from data_contest_types import FactorData
+from contest_trade.contest.data_analyst.data_contest_types import FactorData
 
 logger = logging.getLogger(__name__)
 

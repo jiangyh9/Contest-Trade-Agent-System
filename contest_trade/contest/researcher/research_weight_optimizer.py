@@ -9,7 +9,7 @@ import logging
 import numpy as np
 from pathlib import Path
 from typing import Dict, Optional, List
-from research_contest_types import ResearchContestResult
+from contest_trade.contest.researcher.research_contest_types import ResearchContestResult
 
 logger = logging.getLogger(__name__)
 

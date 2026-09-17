@@ -8,7 +8,7 @@ import joblib
 import numpy as np
 from pathlib import Path
 from typing import List, Dict, Optional, Union
-from research_contest_types import SignalData
+from contest_trade.contest.researcher.research_contest_types import SignalData
 import lightgbm as lgb
 
 logger = logging.getLogger(__name__)

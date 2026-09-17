@@ -13,7 +13,7 @@ import logging
 import re
 from typing import List, Dict, Optional
 
-from data_contest_types import (
+from contest_trade.contest.data_analyst.data_contest_types import (
     FactorData, Observation, Mention, Symbol, Rating, 
     EvaluationResult
 )

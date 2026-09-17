@@ -70,6 +70,7 @@ class ContestTradeDisplay:
         self.market_type = os.environ.get('CONTEST_TRADE_MARKET', 'CN-Stock')
         self.messages = deque(maxlen=200)  # 增加消息队列容量
         self.agent_status = _get_agent_config()
+        self.agent_display_names = self._build_agent_display_names()
         self.current_task = get_text("初始化系统...", "Initializing system...")
         self.progress_info = ""
         self.final_state = None
@@ -82,6 +83,43 @@ class ContestTradeDisplay:
         from contest_trade.config.config import PROJECT_ROOT
         self.logs_dir = Path(PROJECT_ROOT) / "agents_workspace" / "logs"
         self.logs_dir.mkdir(parents=True, exist_ok=True)
+
+    @staticmethod
+    def _extract_risk_profile_from_belief(belief: str) -> str:
+        """从 belief 文本中提取风险画像"""
+        profiles = ["风险偏好者", "稳健投资者", "激进套利者", "防御套利者"]
+        for profile in profiles:
+            if profile in belief:
+                return profile
+        return ""
+
+    def _build_agent_display_names(self) -> Dict[str, str]:
+        """构建 agent 的显示名称（研究代理显示风险画像）"""
+        display_names = {}
+        for agent_name in self.agent_status:
+            if not agent_name.startswith("agent_"):
+                # Data agent 保持原名
+                display_names[agent_name] = agent_name
+                continue
+            # Research agent 尝试从 belief 中提取风险画像
+            try:
+                from contest_trade.config.config import PROJECT_ROOT
+                belief_list_path = PROJECT_ROOT / "config" / "belief_list.json"
+                with open(belief_list_path, 'r', encoding='utf-8') as f:
+                    belief_list = json.load(f)
+                idx = int(agent_name.split("_")[-1])
+                if 0 <= idx < len(belief_list):
+                    profile = self._extract_risk_profile_from_belief(belief_list[idx])
+                    display_names[agent_name] = f"{agent_name}({profile})" if profile else agent_name
+                else:
+                    display_names[agent_name] = agent_name
+            except Exception:
+                display_names[agent_name] = agent_name
+        return display_names
+
+    def get_agent_display_name(self, agent_name: str) -> str:
+        """获取 agent 的显示名称"""
+        return self.agent_display_names.get(agent_name, agent_name)
         
     def create_log_file(self, trigger_time: str):
         """创建本次运行的日志文件"""
@@ -111,7 +149,8 @@ class ContestTradeDisplay:
                         files = list(agent_dir.glob(pattern))
                         if files and self.agent_status[agent_name] != "completed":
                             self.update_agent_status(agent_name, "completed")
-                            self.add_message(get_text("Data Analysis Agent", "Data Analysis Agent"), get_text(f"✅ {agent_name} 完成数据分析", f"✅ {agent_name} completed data analysis"))
+                            display_name = self.get_agent_display_name(agent_name)
+                            self.add_message(get_text("Data Analysis Agent", "Data Analysis Agent"), get_text(f"✅ {display_name} 完成数据分析", f"✅ {display_name} completed data analysis"))
         
         # 检查reports目录（Research Agent结果）
         reports_dir = Path(PROJECT_ROOT) / "agents_workspace" / "reports"
@@ -125,7 +164,8 @@ class ContestTradeDisplay:
                         files = list(agent_dir.glob(pattern))
                         if files and self.agent_status[agent_name] != "completed":
                             self.update_agent_status(agent_name, "completed")
-                            self.add_message(get_text("Research Agent", "Research Agent"), get_text(f"✅ {agent_name} 完成研究分析", f"✅ {agent_name} completed research analysis"))
+                            display_name = self.get_agent_display_name(agent_name)
+                            self.add_message(get_text("Research Agent", "Research Agent"), get_text(f"✅ {display_name} 完成研究分析", f"✅ {display_name} completed research analysis"))
     
     def start_data_agents(self):
         """开始所有Data Analysis Agent"""
@@ -250,7 +290,7 @@ class ContestTradeDisplay:
                     "completed": get_text("✅分析完成", "✅ Analysis Complete")
                 }.get(status, "❓")
                 
-                agent_display = agent_name[:20].ljust(20)
+                agent_display = self.get_agent_display_name(agent_name)[:20].ljust(20)
                 status_text.append(f"{agent_display} {status_icon}\n")
         
         # Research Agent状态
@@ -264,7 +304,7 @@ class ContestTradeDisplay:
                     "completed": get_text("✅分析完成", "✅ Analysis Complete")
                 }.get(status, "❓")
                 
-                agent_display = agent_name[:20].ljust(20)
+                agent_display = self.get_agent_display_name(agent_name)[:20].ljust(20)
                 status_text.append(f"{agent_display} {status_icon}\n")
         
         status_panel = Panel(
@@ -349,34 +389,59 @@ class ContestTradeDisplay:
             research_team_results = step_results.get('research_team', {})
             
             data_factors_count = data_team_results.get('factors_count', 0)
+            data_active_count = data_team_results.get('active_count', data_factors_count)
             research_signals_count = research_team_results.get('signals_count', 0)
+            research_active_count = research_team_results.get('active_count', research_signals_count)
+            research_final_count = research_team_results.get('final_signals_count', research_signals_count)
+            data_tiers = data_team_results.get('data_tiers', {})
+            research_tiers = research_team_results.get('research_tiers', {})
             
-            summary_text.append(get_text(f"📊 数据源: {data_factors_count} | ", f"📊 Data Sources: {data_factors_count} | "), style="green")
-            summary_text.append(get_text(f"🔍 研究信号: {research_signals_count} | ", f"🔍 Research Signals: {research_signals_count} | "), style="blue")
+            summary_text.append(get_text(f"📊 数据源: {data_factors_count} (本轮运行 {data_active_count}) | ", f"📊 Data Sources: {data_factors_count} (Active {data_active_count}) | "), style="green")
+            summary_text.append(get_text(f"🔍 研究信号: {research_signals_count} (本轮运行 {research_active_count} / 入报告 {research_final_count}) | ", f"🔍 Research Signals: {research_signals_count} (Active {research_active_count} / Final {research_final_count}) | "), style="blue")
+            
+            # 淘汰赛层级
+            summary_text.append(get_text("\n🏆 淘汰赛层级:\n", "\n🏆 Knockout Tiers:\n"), style="bold yellow")
+            self._append_tier_summary(summary_text, get_text("数据层", "Data Layer"), data_tiers)
+            self._append_tier_summary(summary_text, get_text("研究层", "Research Layer"), research_tiers)
             
             # 获取所有信号并筛选有机会的信号
             best_signals = step_results.get('contest', {}).get('best_signals', [])
             
             # 筛选 has_opportunity 为 yes 的信号
-            valid_signals = []
-            for signal in best_signals:
-                has_opportunity = signal.get('has_opportunity', 'no')
-                if has_opportunity == 'yes':
-                    valid_signals.append(signal)
+            valid_signals = [s for s in best_signals if s.get('has_opportunity', 'no') == 'yes']
             
             if valid_signals:
-                summary_text.append(get_text(f"🎯 有效信号: {len(valid_signals)}", f"🎯 Valid Signals: {len(valid_signals)}"), style="bold red")
+                summary_text.append(get_text(f"\n🎯 有效信号: {len(valid_signals)}", f"\n🎯 Valid Signals: {len(valid_signals)}"), style="bold red")
                 
-                for i, signal in enumerate(valid_signals):
-                    symbol_name = signal.get('symbol_name', 'N/A')
-                    action = signal.get('action', 'N/A')
-                    agent_id = signal.get('agent_id', 'N/A')
-                    
-                    summary_text.append(get_text(f"\n  {i+1}. Research Agent{agent_id}：", f"\n  {i+1}. Research Agent{agent_id}: "), style="yellow")
-                    summary_text.append(f"{symbol_name}({action}) ", style="cyan")
+                # 按 risk_profile 分组
+                profile_order = ["风险偏好者", "稳健投资者", "激进套利者", "防御套利者"]
+                grouped = {p: [] for p in profile_order}
+                for signal in valid_signals:
+                    profile = signal.get('risk_profile', '未指定')
+                    if profile not in grouped:
+                        grouped[profile] = []
+                    grouped[profile].append(signal)
+                
+                for profile in profile_order + [p for p in grouped if p not in profile_order]:
+                    signals = grouped.get(profile, [])
+                    if not signals:
+                        continue
+                    summary_text.append(get_text(f"\n  ✅ {profile} ({len(signals)}个):", f"\n  ✅ {profile} ({len(signals)}):"), style="bold cyan")
+                    for i, signal in enumerate(signals):
+                        symbol_name = signal.get('symbol_name', 'N/A')
+                        symbol_code = signal.get('symbol_code', 'N/A')
+                        action = signal.get('action', 'N/A')
+                        agent_name = signal.get('agent_name', f"agent_{signal.get('agent_id', 'N/A')}")
+                        risk_profile = signal.get('risk_profile', '')
+                        contest_tier = signal.get('contest_tier', 'N/A')
+                        contest_score = signal.get('contest_score', 'N/A')
+                        display_label = f"{agent_name}({risk_profile})" if risk_profile else agent_name
+                        summary_text.append(get_text(f"\n    {i+1}. {display_label}:", f"\n    {i+1}. {display_label}:"), style="yellow")
+                        summary_text.append(f"{symbol_name}({symbol_code}) {action}", style="cyan")
+                        summary_text.append(get_text(f" [层级:{contest_tier}, 得分:{contest_score}]", f" [Tier:{contest_tier}, Score:{contest_score}]"), style="dim")
                     
             else:
-                summary_text.append(get_text("🎯 有效信号: 0", "🎯 Valid Signals: 0"), style="bold red")     
+                summary_text.append(get_text("\n🎯 有效信号: 0", "\n🎯 Valid Signals: 0"), style="bold red")     
                 summary_text.append(get_text(" 无有效信号", " No valid signals"))
 
             summary_text.append(get_text("\n💡分析完成，按回车退出运行界面...", "\n💡Analysis completed, press Enter to exit the interface..."))
@@ -384,6 +449,23 @@ class ContestTradeDisplay:
             summary_text.append(get_text("❌ 分析失败", "❌ Analysis Failed"), style="red")
         
         return summary_text
+    
+    def _append_tier_summary(self, text: Text, title: str, tiers: dict):
+        """把 tier 字典追加到 Text"""
+        if not tiers:
+            text.append(f"  {title}: N/A\n", style="dim")
+            return
+        champion = tiers.get('CHAMPION', [])
+        bench = tiers.get('BENCH', [])
+        eliminated = tiers.get('ELIMINATED', [])
+        parts = [title]
+        if champion:
+            parts.append(f"CHAMPION({', '.join(champion)})")
+        if bench:
+            parts.append(f"BENCH({', '.join(bench)})")
+        if eliminated:
+            parts.append(f"ELIMINATED({', '.join(eliminated)})")
+        text.append(f"  {' | '.join(parts)}\n", style="dim")
 
 
 def run_contest_analysis_interactive(trigger_time: str, market: str):

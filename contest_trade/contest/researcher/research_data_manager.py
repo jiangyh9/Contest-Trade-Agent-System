@@ -5,10 +5,15 @@ Research数据管理器
 import re
 import json
 import logging
+import sys
 from pathlib import Path
 from datetime import datetime, timedelta
 from typing import List, Dict, Optional
-from research_contest_types import SignalData
+
+PROJECT_ROOT = Path(__file__).parent.parent.parent.resolve()
+sys.path.append(str(PROJECT_ROOT))
+
+from contest_trade.contest.researcher.research_contest_types import SignalData
 
 logger = logging.getLogger(__name__)
 
@@ -261,13 +266,29 @@ class ResearchDataManager:
     def set_market_manager(self, market_manager):
         """设置市场管理器（用于计算收益率）"""
         self.market_manager = market_manager
+
+    def _save_signal_contest_data(self, signal: SignalData):
+        """把 contest_data 写回原始信号 JSON 文件"""
+        if not signal.file_path:
+            return False
+        try:
+            with open(signal.file_path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            data['contest_data'] = signal.contest_data
+            with open(signal.file_path, 'w', encoding='utf-8') as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
+            return True
+        except Exception as e:
+            logger.warning(f"保存信号 contest_data 失败 {signal.file_path}: {e}")
+            return False
     
-    async def calculate_signal_reward(self, signal: SignalData) -> Optional[float]:
+    async def calculate_signal_reward(self, signal: SignalData, holding_days: int = 1) -> Optional[float]:
         """
         计算单个信号的收益率
         
         Args:
             signal: 信号数据
+            holding_days: 持仓天数（按交易日计）
             
         Returns:
             float: 收益率
@@ -284,22 +305,19 @@ class ResearchDataManager:
         # 解析信号时间
         signal_time = signal.trigger_time
         signal_dt = datetime.strptime(signal_time, "%Y-%m-%d %H:%M:%S")
+        trigger_time_str = signal_dt.strftime("%Y-%m-%d %H:%M:%S")
         
-        # 计算持有期（假设持有1天）
-        entry_date = signal_dt.strftime("%Y-%m-%d %H:%M:%S")
-        exit_date = (signal_dt + timedelta(days=1)).strftime("%Y-%m-%d %H:%M:%S")
-        
-        # 获取入场价格（开盘价）
-        entry_price_data = self.market_manager.get_symbol_price("CN-Stock", symbol_code, entry_date, 0)
+        # 获取入场价格（信号日开盘价，date_diff=0）
+        entry_price_data = self.market_manager.get_symbol_price("CN-Stock", symbol_code, trigger_time_str, 0)
         if not entry_price_data or 'open' not in entry_price_data:
-            raise ValueError(f"无法获取 {symbol_code} 在 {entry_date} 的入场价格")
+            raise ValueError(f"无法获取 {symbol_code} 在 {trigger_time_str} 的入场价格")
         
         entry_price = float(entry_price_data['open'])
         
-        # 获取出场价格（次日开盘价）
-        exit_price_data = self.market_manager.get_symbol_price("CN-Stock", symbol_code, exit_date, 0)
+        # 获取出场价格（持有 holding_days 个交易日后的开盘价）
+        exit_price_data = self.market_manager.get_symbol_price("CN-Stock", symbol_code, trigger_time_str, holding_days)
         if not exit_price_data or 'open' not in exit_price_data:
-            raise ValueError(f"无法获取 {symbol_code} 在 {exit_date} 的出场价格")
+            raise ValueError(f"无法获取 {symbol_code} 在 {trigger_time_str} 后第 {holding_days} 个交易日的出场价格")
         
         exit_price = float(exit_price_data['open'])
         

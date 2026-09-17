@@ -23,19 +23,19 @@ llm:
   provider: "openai"
   base_url: "https://api.deepseek.com"
   api_key: "" #YOUR_DEEPSEEK_API_KEY
-  model_name: "deepseek-chat"
+  model_name: "deepseek-pro"
 
 llm_thinking:
   provider: "openai"
   base_url: "https://api.deepseek.com"
   api_key: "" #YOUR_DEEPSEEK_API_KEY
-  model_name: "deepseek-reasoner"
+  model_name: "deepseek-pro"
 
 vlm:
   provider: "openai"
-  base_url: "https://api.stepfun.com/v1"
-  api_key: "" #YOUR_STEPFUN_API_KEY
-  model_name: "step-1o-turbo-vision"
+  base_url: "https://api.deepseek.com"
+  api_key: "" #YOUR_DEEPSEEK_API_KEY
+  model_name: "deepseek-pro"
 
 # US Market specific data agents configuration
 data_agents_config:
@@ -63,9 +63,32 @@ market_config_file: "config/market_config_us.yaml"
 
 system_language: "English"
 
+# 数据层淘汰赛配置
+data_contest_config:
+  enabled: True
+  mode: "knockout"
+  history_window_days: 5
+  champion_ratio: 0.30
+  eliminated_ratio: 0.30
+  bench_revival_interval: 2
+  eliminated_revival_interval: 5
+
+# 研究层淘汰赛配置
 researcher_contest_config:
-  contest_mode: False
+  enabled: True
+  mode: "knockout"
   judger_config: llm
   num_judgers: 3
   window_m: 3
   window_n: 3
+  champion_ratio: 0.30
+  eliminated_ratio: 0.30
+  bench_revival_interval: 2
+  eliminated_revival_interval: 5
+  fallback_to_judge: True
+  # 不同风险画像的持仓天数（用于计算 forward return 和淘汰）
+  holding_period_by_risk_profile:
+    激进套利者: 1
+    风险偏好者: 1
+    稳健投资者: 5
+    防御套利者: 3

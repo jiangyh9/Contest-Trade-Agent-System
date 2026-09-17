@@ -21,7 +21,7 @@ PROJECT_ROOT = Path(__file__).parent.parent.parent.resolve()
 sys.path.append(str(PROJECT_ROOT))
 
 from utils.market_manager import GLOBAL_MARKET_MANAGER
-from data_contest_types import FactorData
+from contest_trade.contest.data_analyst.data_contest_types import FactorData
 
 logger = logging.getLogger(__name__)
 

@@ -62,10 +62,12 @@ class ResearchAgentConfig:
     output_language: str
     plan: bool
     react: bool
+    holding_period: int
 
-    def __init__(self, agent_name: str = "research_agent", belief: str = ""):
+    def __init__(self, agent_name: str = "research_agent", belief: str = "", holding_period: int = 1):
         self.agent_name = agent_name
         self.belief = belief
+        self.holding_period = holding_period
         self.max_react_step = cfg.research_agent_config["max_react_step"]
         self.tool_config = ToolManagerConfig(cfg.research_agent_config["tools"])
         self.output_language = cfg.system_language
@@ -392,7 +394,7 @@ class ResearchAgent:
 
     def get_invest_prompt(self):
         """获取投资提示"""
-        return prompt_for_research_invest_task
+        return prompt_for_research_invest_task.format(holding_period=self.config.holding_period)
 
     def get_output_format(self):
         """获取输出格式"""

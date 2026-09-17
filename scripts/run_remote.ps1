@@ -1,16 +1,13 @@
-# ContestTrade 远程运行脚本 (PowerShell / Windows)
-# 用法：.\scripts\run_remote.ps1 [CN-Stock|US-Stock]
+# 非交互式远程/定时运行 ContestTrade（适用于 Cursor Mobile 等场景）
+$ErrorActionPreference = "Stop"
 
-$Market = if ($args[0]) { $args[0] } else { "CN-Stock" }
-$RepoDir = Split-Path -Parent $PSScriptRoot
+$condaEnv = "contesttrade"
+$repoDir = "C:\Users\jiangyueheng\Downloads\ContestTrade"
 
-Set-Location $RepoDir
+# 激活 conda 环境
+& conda activate $condaEnv
 
-conda activate contesttrade
+Set-Location $repoDir
 
-Write-Host "🚀 启动 ContestTrade 远程分析 | 市场: $Market | 时间: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')"
-
-python -m cli.main run --market $Market --now
-
-Write-Host "✅ 分析完成"
-Write-Host "📄 报告位置: $RepoDir\contest_trade\agents_workspace\results\"
+# 使用当前时间、默认 A 股市场，跳过交互式提示
+python -m cli.main run --market CN-Stock --now

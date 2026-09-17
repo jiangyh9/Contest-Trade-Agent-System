@@ -6,10 +6,15 @@ import json
 import logging
 import asyncio
 import requests
+import sys
 from pathlib import Path
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Tuple
-from research_contest_types import SignalData, JudgerScore
+
+PROJECT_ROOT = Path(__file__).parent.parent.parent.resolve()
+sys.path.append(str(PROJECT_ROOT))
+
+from contest_trade.contest.researcher.research_contest_types import SignalData, JudgerScore
 
 logger = logging.getLogger(__name__)
 
@@ -249,45 +254,52 @@ Format notes:
             Dict[agent_name, avg_return]: 每个研究员的历史平均收益率
         """
         if not self.data_manager:
-            raise ValueError("未提供数据管理器，无法计算历史收益率")
+            logger.warning("未提供数据管理器，无法计算历史收益率")
+            return None
         
-        # 解析当前时间
-        current_dt = datetime.strptime(trigger_time.split(' ')[0], "%Y-%m-%d")
+        try:
+            current_date = trigger_time.split(' ')[0]
+            agent_signals = self.data_manager.load_historical_signals(current_date)
+            if not agent_signals:
+                return None
+        except Exception as e:
+            logger.warning(f"加载历史信号失败，跳过历史收益计算: {e}")
+            return None
         
-        # 获取所有研究员名称
-        agent_names = list(signals.keys())
         historical_returns = {}
         
-        for agent_name in agent_names:
+        for agent_name in signals.keys():
             agent_returns = []
             
-            # 查找过去window_m天的信号
-            for days_back in range(1, self.window_m + 1):
-                history_date = current_dt - timedelta(days=days_back)
-                history_date_str = history_date.strftime("%Y-%m-%d")
-                
-                history_signals = self.data_manager.load_signals_data(history_date_str)
-                
-                if history_signals and agent_name in history_signals:
-                    signal = history_signals[agent_name]
-                    
-                    # 检查信号是否有reward数据
-                    if hasattr(signal, 'reward') and signal.reward is not None:
-                        agent_returns.append(signal.reward)
-                    else:
-                        # 如果没有reward数据，尝试实时计算
-                        reward = await self.data_manager.calculate_signal_reward(signal)
-                        agent_returns.append(reward)
+            for signal in agent_signals.get(agent_name, []):
+                if signal is None:
+                    continue
+                # 从历史信号 belief 推断持仓期
+                holding_days = 1
+                if signal.belief:
+                    for profile, period in getattr(cfg, 'researcher_contest_config', {}).get('holding_period_by_risk_profile', {}).items():
+                        if profile in signal.belief:
+                            holding_days = period
+                            break
+                if signal.has_contest_data() and 'reward' in signal.contest_data:
+                    stored_reward = signal.contest_data['reward']
+                    stored_holding = signal.contest_data.get('holding_days')
+                    if stored_holding == holding_days:
+                        agent_returns.append(stored_reward)
+                        continue
+                try:
+                    reward = await self.data_manager.calculate_signal_reward(signal, holding_days=holding_days)
+                    agent_returns.append(reward)
+                except Exception as e:
+                    logger.debug(f"计算 {agent_name} 历史收益失败: {e}")
+                    continue
             
-            # 计算平均收益率
             if agent_returns:
                 avg_return = sum(agent_returns) / len(agent_returns)
                 historical_returns[agent_name] = avg_return
-            else:
-                raise ValueError(f"研究员 {agent_name} 没有历史数据")
                 
         logger.info(f"计算历史收益率完成：{len(historical_returns)} 个研究员的历史数据")
-        return historical_returns
+        return historical_returns if historical_returns else None
     
     def _save_judge_results(self, trigger_time: str, all_scores: Dict[str, List[JudgerScore]], all_responses: Dict[str, str]):
         """保存评分结果"""

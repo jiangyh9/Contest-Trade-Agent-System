@@ -231,7 +231,7 @@ Your submission should include following parts for EACH opportunity you identify
 4. Based on the evidence_list, you need to give a probability to this opportunity.
 5. You need to give a limitation to your suggestion, such as risk, etc. No limitation will be rejected.
 6. You should provide between 1 to 5 opportunity suggestions based on what you find in the market. Only submit signals for opportunities you genuinely identify.
-7. If accepted, your suggestions will execute when the market opens and hold for one day. So you need to focus on short-term information.
+7. If accepted, your suggestions will execute when the market opens and hold for {holding_period} days. So you need to focus on information that is likely to be reflected in the stock price over this horizon.
 8. Each signal should be independent and focus on different stocks or strategies.
 9. If you cannot find 5 valuable opportunities, submit fewer high-quality signals rather than padding with low-quality ones.
 """

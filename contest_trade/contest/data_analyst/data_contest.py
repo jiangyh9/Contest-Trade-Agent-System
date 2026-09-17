@@ -22,10 +22,10 @@ sys.path.append(str(PROJECT_ROOT))
 from models.llm_model import GLOBAL_LLM
 from utils.market_manager import GLOBAL_MARKET_MANAGER
 
-from data_contest_types import FactorData, ContestResult
-from data_manager import ContestDataManager
-from evaluator import ContestEvaluator
-from predictor import ContestPredictor
+from contest_trade.contest.data_analyst.data_contest_types import FactorData, ContestResult
+from contest_trade.contest.data_analyst.data_manager import ContestDataManager
+from contest_trade.contest.data_analyst.evaluator import ContestEvaluator
+from contest_trade.contest.data_analyst.predictor import ContestPredictor
 
 logger = logging.getLogger(__name__)
 

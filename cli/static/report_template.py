@@ -160,6 +160,25 @@ class FinalReportGenerator:
         
     def get_text(self, cn_text: str, en_text: str) -> str:
         return en_text if self.market_type == 'US-Stock' else cn_text
+
+    def _format_tiers(self, tiers: dict, title: str) -> str:
+        """把 tier 字典格式化为 Markdown 文本"""
+        if not tiers:
+            return ""
+        champion = tiers.get('CHAMPION', [])
+        bench = tiers.get('BENCH', [])
+        eliminated = tiers.get('ELIMINATED', [])
+        lines = [f"### {title}", ""]
+        if champion:
+            lines.append(f"- **🏆 CHAMPION**: {', '.join(champion)}")
+        if bench:
+            lines.append(f"- **🔄 BENCH**: {', '.join(bench)}")
+        if eliminated:
+            lines.append(f"- **❌ ELIMINATED**: {', '.join(eliminated)}")
+        if not any([champion, bench, eliminated]):
+            lines.append(f"- {self.get_text('暂无淘汰赛状态数据', 'No knockout status data')}")
+        lines.append("")
+        return "\n".join(lines)
         
     def generate_markdown_report(self, save_path: Path) -> str:
         """生成Markdown格式的报告"""
@@ -178,6 +197,11 @@ class FinalReportGenerator:
         
         data_factors_count = data_team_results.get('factors_count', 0)
         research_signals_count = research_team_results.get('signals_count', 0)
+        research_final_count = research_team_results.get('final_signals_count', research_signals_count)
+        data_active_count = data_team_results.get('active_count', data_factors_count)
+        research_active_count = research_team_results.get('active_count', research_signals_count)
+        data_tiers = data_team_results.get('data_tiers', {})
+        research_tiers = research_team_results.get('research_tiers', {})
         best_signals = contest_results.get('best_signals', [])
         
         # 筛选有效信号
@@ -193,10 +217,18 @@ class FinalReportGenerator:
 
 **{self.get_text('分析时间', 'Analysis Time')}**: {trigger_time}  
 **{self.get_text('分析状态', 'Analysis Status')}**: ✅ {self.get_text('完成', 'Completed')}  
-**{self.get_text('数据源数量', 'Data Sources Count')}**: {data_factors_count}  
-**{self.get_text('研究信号数量', 'Research Signals Count')}**: {research_signals_count}  
+**{self.get_text('数据源数量', 'Data Sources Count')}**: {data_factors_count} ({self.get_text('本轮运行', 'Active')} {data_active_count})  
+**{self.get_text('研究信号数量', 'Research Signals Count')}**: {research_signals_count} ({self.get_text('本轮运行', 'Active')} {research_active_count} / {self.get_text('进入报告', 'Final')} {research_final_count})  
 **{self.get_text('有效投资信号', 'Valid Investment Signals')}**: {len(valid_signals)}  
 **{self.get_text('信号有效率', 'Signal Effectiveness Rate')}**: {signal_rate}
+
+---
+
+## 🏆 {self.get_text('淘汰赛状态', 'Knockout Tournament Status')}
+
+{self._format_tiers(data_tiers, self.get_text('数据层', 'Data Layer'))}
+
+{self._format_tiers(research_tiers, self.get_text('研究层', 'Research Layer'))}
 
 ---
 
@@ -224,12 +256,21 @@ class FinalReportGenerator:
                     symbol_code = signal.get('symbol_code', 'N/A')
                     action = signal.get('action', 'N/A')
                     agent_id = signal.get('agent_id', 'N/A')
+                    agent_name = signal.get('agent_name', f"agent_{agent_id}")
+                    risk_profile = signal.get('risk_profile', '')
                     probability = signal.get('probability', 'N/A')
+                    contest_tier = signal.get('contest_tier', 'N/A')
+                    contest_score = signal.get('contest_score', 'N/A')
 
                     report_content += f"#### {i}. {symbol_name} ({symbol_code})\n\n"
                     report_content += f"- **{self.get_text('投资动作', 'Investment Action')}**: {action}\n"
-                    report_content += f"- **{self.get_text('分析来源', 'Analysis Source')}**: Research Agent {agent_id}\n"
+                    source_label = f"{agent_name}({risk_profile})" if risk_profile else agent_name
+                    report_content += f"- **{self.get_text('分析来源', 'Analysis Source')}**: {source_label}\n"
                     report_content += f"- **{self.get_text('置信度', 'Confidence')}**: {probability}\n"
+                    report_content += f"- **{self.get_text('竞赛层级', 'Contest Tier')}**: {contest_tier} "
+                    if contest_score != 'N/A':
+                        report_content += f"({self.get_text('得分', 'Score')}: {contest_score})"
+                    report_content += "\n"
 
                     # 证据详情
                     evidence_list = signal.get('evidence_list', [])
@@ -260,7 +301,10 @@ class FinalReportGenerator:
             
             for i, signal in enumerate(invalid_signals, 1):
                 agent_id = signal.get('agent_id', 'N/A')
-                report_content += f"{i}. Research Agent {agent_id} - {self.get_text('无明确投资机会', 'No clear investment opportunity')}\n"
+                agent_name = signal.get('agent_name', f"agent_{agent_id}")
+                risk_profile = signal.get('risk_profile', '')
+                source_label = f"{agent_name}({risk_profile})" if risk_profile else agent_name
+                report_content += f"{i}. {source_label} - {self.get_text('无明确投资机会', 'No clear investment opportunity')}\n"
             
             report_content += "\n"
         
@@ -365,7 +409,10 @@ class FinalReportGenerator:
             symbol_code = signal.get('symbol_code', 'N/A')
             action = signal.get('action', 'N/A')
             agent_id = signal.get('agent_id', 'N/A')
+            agent_name = signal.get('agent_name', f"agent_{agent_id}")
+            risk_profile = signal.get('risk_profile', '')
             has_opportunity = signal.get('has_opportunity', 'no')
+            source_label = f"{agent_name}({risk_profile})" if risk_profile else agent_name
             
             status = self.get_text("✅ 推荐", "✅ Recommended") if has_opportunity == 'yes' else self.get_text("❌ 排除", "❌ Excluded")
             
@@ -374,7 +421,7 @@ class FinalReportGenerator:
                 symbol_name,
                 symbol_code,
                 action,
-                f"Agent {agent_id}",
+                source_label,
                 status
             )
         
