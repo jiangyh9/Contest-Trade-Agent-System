@@ -1077,6 +1077,42 @@ def run(
     console.print(get_text(f"[green]感谢使用ContestTrade![/green]", f"[green]Thank you for using ContestTrade![/green]"))
 
 @app.command()
+def backtest(
+    start: str = typer.Option(..., "--start", "-s", help="开始日期 YYYY-MM-DD"),
+    end: str = typer.Option(..., "--end", "-e", help="结束日期 YYYY-MM-DD"),
+    market: str = typer.Option("CN-Stock", "--market", "-m", help="市场 (CN-Stock/US-Stock)"),
+    force: bool = typer.Option(False, "--force", "-f", help="强制重新计算，清除缓存"),
+    output: Optional[str] = typer.Option(None, "--output", "-o", help="输出目录"),
+):
+    """运行历史回测（只使用支持历史 trigger_time 的数据源）"""
+    import asyncio
+    from contest_trade.backtest.backtest_runner import BacktestRunner
+
+    if market not in ["CN-Stock", "US-Stock"]:
+        console.print("[red]市场选择错误，请选择 CN-Stock 或 US-Stock[/red]")
+        raise typer.Exit(1)
+
+    output_dir = Path(output) if output else None
+    runner = BacktestRunner(
+        start_date=start,
+        end_date=end,
+        market=market,
+        output_dir=output_dir,
+        force_recompute=force,
+    )
+    try:
+        summary = asyncio.run(runner.run())
+        console.print(f"\n[green]✅ 回测完成[/green]")
+        console.print(f"交易日: {summary['success_days']}/{summary['total_days']}")
+        if summary.get('profile_signal_counts'):
+            console.print("各风险画像信号数:")
+            for profile, stats in summary['profile_signal_counts'].items():
+                console.print(f"  {profile}: 总计 {stats['total']}, 日均 {stats['avg_per_day']}")
+    except Exception as e:
+        console.print(f"[red]回测失败: {e}[/red]")
+        raise typer.Exit(1)
+
+@app.command()
 def config():
     """显示当前配置"""
     try:

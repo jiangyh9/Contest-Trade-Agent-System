@@ -18,3 +18,5 @@ tabulate
 akshare
 crawl4ai
 lightgbm
+streamlit
+plotly

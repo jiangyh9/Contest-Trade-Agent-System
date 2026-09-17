@@ -14,14 +14,21 @@ class ProjectConfig:
         # Get market type from environment variable, default to CN-Stock
         market_type = os.environ.get('CONTEST_TRADE_MARKET', 'CN-Stock')
         
-        # Choose config file based on market type
-        if market_type == 'US-Stock':
+        # Backtest mode: use dedicated backtest config
+        is_backtest = os.environ.get('CONTEST_TRADE_BACKTEST', 'false').lower() == 'true'
+        
+        # Choose config file based on market type and backtest mode
+        if is_backtest:
+            config_filename = "config_backtest.yaml"
+        elif market_type == 'US-Stock':
             config_filename = "config_us.yaml"
         else:
             config_filename = "config.yaml"
         
         yaml_path = PROJECT_ROOT.parent / config_filename
-        print(f"Loading config from: {yaml_path} (Market: {market_type})")
+        mode_label = "Backtest" if is_backtest else market_type
+        print(f"Loading config from: {yaml_path} (Mode: {mode_label})")
+        self.is_backtest = is_backtest
 
         with open(yaml_path, "r", encoding="utf-8") as fr:
             config = yaml.load(fr, Loader=yaml.FullLoader)
