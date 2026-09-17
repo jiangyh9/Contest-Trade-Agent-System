@@ -34,9 +34,39 @@ class ProjectConfig:
             config = yaml.load(fr, Loader=yaml.FullLoader)
         for k in config:
             setattr(self, k, config[k])
+
+        # 敏感信息优先从环境变量读取，避免把 key 写进仓库
+        self._load_secrets_from_env()
         
         # Store the market type for reference
         self.market_type = market_type
+
+    def _load_secrets_from_env(self) -> None:
+        """从环境变量读取 API key，覆盖配置文件中的占位符。"""
+        # 顶层 key
+        for key_name in [
+            "tushare_key",
+            "bocha_key",
+            "serp_key",
+            "fmp_key",
+            "finnhub_key",
+            "alpha_vantage_key",
+            "polygon_key",
+        ]:
+            env_val = os.environ.get(key_name.upper())
+            if env_val:
+                setattr(self, key_name, env_val)
+
+        # LLM api_key (支持嵌套 dict)
+        for section in ["llm", "llm_thinking", "vlm"]:
+            section_cfg = getattr(self, section, None)
+            if isinstance(section_cfg, dict):
+                env_val = os.environ.get(f"{section.upper()}_API_KEY")
+                if env_val:
+                    section_cfg["api_key"] = env_val
+                # 也支持通用的 OPENAI_API_KEY
+                if not section_cfg.get("api_key") and os.environ.get("OPENAI_API_KEY"):
+                    section_cfg["api_key"] = os.environ.get("OPENAI_API_KEY")
 
 cfg = ProjectConfig()
 

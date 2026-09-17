@@ -1,4 +1,8 @@
-tushare_key: "<EMPTY_KEY>"
+# 敏感信息请通过环境变量注入，例如 export TUSHARE_KEY=xxx
+# 支持的变量名：TUSHARE_KEY, BOCHA_KEY, SERP_KEY, FMP_KEY, FINNHUB_KEY
+# LLM: LLM_API_KEY / LLM_THINKING_API_KEY / VLM_API_KEY / OPENAI_API_KEY
+
+tushare_key: ""
 
 bocha_key: ""
 serp_key: ""
@@ -9,19 +13,19 @@ finnhub_key: ""
 llm:
   provider: "openai"
   base_url: "https://api.deepseek.com"
-  api_key: "<EMPTY_KEY>"
+  api_key: ""
   model_name: "deepseek-pro"
 
 llm_thinking:
   provider: "openai"
   base_url: "https://api.deepseek.com"
-  api_key: "<EMPTY_KEY>"
+  api_key: ""
   model_name: "deepseek-pro"
 
 vlm:
   provider: "openai"
   base_url: "https://api.deepseek.com"
-  api_key: "<EMPTY_KEY>"
+  api_key: ""
   model_name: "deepseek-pro"
 
 # 回测专用：只使用支持历史 trigger_time 的 Tushare/AKShare 数据源
