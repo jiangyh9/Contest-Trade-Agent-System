@@ -235,3 +235,6 @@ test*
 *copy*
 *tmp*
 *_cache
+
+# 回测生成的本地结果
+backtest_results/
