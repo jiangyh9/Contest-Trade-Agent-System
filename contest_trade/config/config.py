@@ -5,7 +5,14 @@ from pathlib import Path
 import yaml
 import os
 
+from dotenv import load_dotenv
+
 PROJECT_ROOT = Path(__file__).parent.parent.resolve()
+
+# 如果项目根目录存在 .env，自动加载环境变量（不提交到仓库）
+_env_path = PROJECT_ROOT.parent / ".env"
+if _env_path.exists():
+    load_dotenv(dotenv_path=_env_path, override=False)
 
 
 class ProjectConfig:
