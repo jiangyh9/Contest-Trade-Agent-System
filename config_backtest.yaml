@@ -14,19 +14,19 @@ llm:
   provider: "openai"
   base_url: "https://api.deepseek.com"
   api_key: ""
-  model_name: "deepseek-pro"
+  model_name: "deepseek-v4-pro"
 
 llm_thinking:
   provider: "openai"
   base_url: "https://api.deepseek.com"
   api_key: ""
-  model_name: "deepseek-pro"
+  model_name: "deepseek-v4-pro"
 
 vlm:
   provider: "openai"
   base_url: "https://api.deepseek.com"
   api_key: ""
-  model_name: "deepseek-pro"
+  model_name: "deepseek-v4-pro"
 
 # 回测专用：只使用支持历史 trigger_time 的 Tushare/AKShare 数据源
 data_agents_config:
