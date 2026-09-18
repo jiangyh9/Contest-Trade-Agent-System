@@ -662,6 +662,11 @@ async def run_with_events_capture(company, trigger_time: str, display: ContestTr
             
             # 处理完成事件
             elif event_type == "on_chain_end":
+                # 在显示“所有 Agent 完成”之前，先基于文件把每个 Agent 的单独完成消息补上，
+                # 避免系统汇总消息先于个体完成消息出现。
+                if event_name in ["run_data_agents", "run_research_agents"]:
+                    display.check_agent_status_from_events_and_files(trigger_time)
+
                 completion_config = {
                     "run_data_agents": {
                         "task": get_text("✅ Data Analysis Agent 完成", "✅ Data Analysis Agent Completed"),
