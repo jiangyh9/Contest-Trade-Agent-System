@@ -550,7 +550,7 @@ class SimpleTradeCompany:
         print("🚀 开始运行Simplified TradeCompany...")
         
         if config is None:
-            config = RunnableConfig(recursion_limit=50)
+            config = RunnableConfig(recursion_limit=200)
         
         # 创建初始状态
         initial_state = CompanyState(
@@ -586,7 +586,7 @@ class SimpleTradeCompany:
     async def run_company_with_events(self, trigger_time: str, config: RunnableConfig = None):
         """使用事件流运行公司"""
         if config is None:
-            config = RunnableConfig(recursion_limit=50)
+            config = RunnableConfig(recursion_limit=200)
         
         # 创建初始状态
         initial_state = CompanyState(

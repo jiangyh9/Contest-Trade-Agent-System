@@ -72,7 +72,7 @@ class BacktestRunner:
         from langchain_core.runnables import RunnableConfig
 
         company = SimpleTradeCompany()
-        config = RunnableConfig(recursion_limit=50)
+        config = RunnableConfig(recursion_limit=200)
         final_state = await company.run_company(trigger_time, config=config)
 
         step_results = final_state.get('step_results', {})

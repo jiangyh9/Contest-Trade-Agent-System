@@ -566,7 +566,7 @@ class DataAnalysisAgent:
         print(f"🚀 Data Analysis Agent Starting - {input.trigger_time}")
         
         # 返回事件流
-        async for event in self.app.astream_events(initial_state, version="v2", config=config or RunnableConfig(recursion_limit=50)):
+        async for event in self.app.astream_events(initial_state, version="v2", config=config or RunnableConfig(recursion_limit=100)):
             yield event
 
     async def run_with_monitoring(self, input: DataAnalysisAgentInput) -> DataAnalysisAgentOutput:
