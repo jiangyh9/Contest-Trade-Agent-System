@@ -59,14 +59,13 @@ market_config_file: "config/market_config.yaml"
 
 system_language: "中文"
 
-# 回测专用淘汰赛配置
+# 回测专用淘汰赛配置（Data Agent 只聚合数据，不参与淘汰）
 data_contest_config:
-  enabled: True
+  enabled: False
   mode: "knockout"
   history_window_days: 5
   champion_ratio: 0.30
   eliminated_ratio: 0.30
-  # interval=1 表示每层 agent 每轮都运行，仅按表现打 tier 标签
   bench_revival_interval: 1
   eliminated_revival_interval: 1
 

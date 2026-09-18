@@ -139,14 +139,13 @@ market_config_file: "config/market_config.yaml"
 
 system_language: "中文"
 
-# 数据层淘汰赛配置
+# 数据层淘汰赛配置（已禁用：Data Agent 只做数据聚合，不参与淘汰）
 data_contest_config:
-  enabled: True
+  enabled: False
   mode: "knockout"
   history_window_days: 5
-  champion_ratio: 0.30      # 前 30% 进入 CHAMPION 层
-  eliminated_ratio: 0.30    # 后 30% 进入 ELIMINATED 层
-  # interval=1 表示每层 agent 每轮都运行，仅按表现打 tier 标签，不跳过任何 agent
+  champion_ratio: 0.30
+  eliminated_ratio: 0.30
   bench_revival_interval: 1
   eliminated_revival_interval: 1
 
