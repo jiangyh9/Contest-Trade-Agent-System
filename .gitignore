@@ -209,6 +209,7 @@ __marimo__/
 # PROJECT
 contest_trade/factors/factor_datas
 contest_trade/utils/tushare_cache
+contest_trade/utils/cache/
 contest_trade/factors/builder
 contest_trade/factors/raw_data/
 contest_trade/signals/

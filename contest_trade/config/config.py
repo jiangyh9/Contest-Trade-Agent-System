@@ -71,6 +71,11 @@ class ProjectConfig:
                 env_val = os.environ.get(f"{section.upper()}_API_KEY")
                 if env_val:
                     section_cfg["api_key"] = env_val
+                # VLM 额外兼容阿里云百炼 DASHSCOPE_API_KEY
+                if section == "vlm" and not section_cfg.get("api_key"):
+                    dashscope_key = os.environ.get("DASHSCOPE_API_KEY")
+                    if dashscope_key:
+                        section_cfg["api_key"] = dashscope_key
                 # 也支持通用的 OPENAI_API_KEY
                 if not section_cfg.get("api_key") and os.environ.get("OPENAI_API_KEY"):
                     section_cfg["api_key"] = os.environ.get("OPENAI_API_KEY")
