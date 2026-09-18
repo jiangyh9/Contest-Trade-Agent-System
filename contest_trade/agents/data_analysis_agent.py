@@ -195,6 +195,14 @@ class DataAnalysisAgent:
     async def _recompute_factor(self, state: DataAnalysisAgentState):
         """recompute factor"""
         if state["result"]:
+            context = getattr(state["result"], "context_string", "") or ""
+            # 之前运行失败或内容为空时，自动重新计算
+            failed_markers = ["LLM分析失败", "LLM analysis failed", "分析失败", "数据获取失败", "无数据"]
+            is_failed = any(marker in context for marker in failed_markers) or not context.strip()
+            if is_failed:
+                print(f"Cached data for {state['trigger_time']} appears failed/empty, recomputing factor")
+                state["result"] = None
+                return "yes"
             print(f"Data already exists for {state['trigger_time']}, skipping recompute")
             return "no"
         else:

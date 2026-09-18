@@ -423,57 +423,58 @@ class PriceMarketAkshare(DataSourceBase):
 请基于事实数据生成客观的市场描述报告：
 """
             
+            messages = [
+                {"role": "system", "content": "你是一位资深的金融市场分析师，专长于综合技术分析、资金流向分析和宏观市场判断。请基于多维度数据生成专业的市场分析报告。"},
+                {"role": "user", "content": prompt}
+            ]
+
+            llm_summary = ""
+
+            # 优先尝试带 K线图的 VLM；若模型不支持 vision 或返回空，自动降级到文本 LLM
             if GLOBAL_VISION_LLM and has_kline_charts_base64:
-                image_contents = []
-                for stock_code, chart_info in kline_charts_base64.items():
-                    image_contents.append({
-                        "type": "image_url",
-                        "image_url": {
-                            "url": f"data:image/png;base64,{chart_info['base64']}",
-                            "detail": "high"
+                try:
+                    image_contents = []
+                    for stock_code, chart_info in kline_charts_base64.items():
+                        image_contents.append({
+                            "type": "image_url",
+                            "image_url": {
+                                "url": f"data:image/png;base64,{chart_info['base64']}",
+                                "detail": "high"
+                            }
+                        })
+                    vision_messages = [
+                        {"role": "system", "content": "你是一位资深的金融市场分析师，专长于综合技术分析、资金流向分析和宏观市场判断。请基于多维度数据生成专业的市场分析报告。"},
+                        {
+                            "role": "user",
+                            "content": [{"type": "text", "text": prompt}] + image_contents
                         }
-                    })
-                user_message = {
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": prompt}
-                    ] + image_contents
-                }
-                
-                messages = [
-                    {"role": "system", "content": "你是一位资深的金融市场分析师，专长于综合技术分析、资金流向分析和宏观市场判断。请基于多维度数据生成专业的市场分析报告。"},
-                    user_message
-                ]
-                
-                response = await GLOBAL_VISION_LLM.a_run(
-                    messages=messages,
-                    temperature=0.3,
-                    max_tokens=2000
-                )
-            else:
-                user_message = {
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": prompt}
                     ]
-                }
-                
-                messages = [
-                    {"role": "system", "content": "你是一位资深的金融市场分析师，专长于综合技术分析、资金流向分析和宏观市场判断。请基于多维度数据生成专业的市场分析报告。"},
-                    user_message
-                ]
+                    response = await GLOBAL_VISION_LLM.a_run(
+                        messages=vision_messages,
+                        temperature=0.3,
+                        max_tokens=2000
+                    )
+                    if response and response.content:
+                        llm_summary = response.content
+                        logger.info("Price Market VLM 分析成功")
+                    else:
+                        logger.warning("VLM 未返回内容，将降级到文本 LLM")
+                except Exception as e:
+                    logger.warning(f"VLM 分析失败: {e}，将降级到文本 LLM")
+
+            # 无 VLM、VLM 失败或返回空时，使用文本 LLM（不带图）
+            if not llm_summary:
                 response = await GLOBAL_LLM.a_run(
                     messages=messages,
                     thinking=False,
                     temperature=0.3,
                     max_tokens=2000
                 )
-            
-            if response and response.content:
-                llm_summary = response.content
-            else:
-                logger.error(f"LLM分析未返回内容")
-                llm_summary = "LLM分析失败"
+                if response and response.content:
+                    llm_summary = response.content
+                else:
+                    logger.error(f"LLM分析未返回内容")
+                    llm_summary = "LLM分析失败"
             
             return {
                 'trade_date': trade_date,

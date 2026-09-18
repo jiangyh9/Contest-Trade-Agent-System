@@ -177,6 +177,14 @@ class ResearchAgent:
     async def _recompute_signal(self, state: ResearchAgentState):
         """recompute signal"""
         if state["result"]:
+            final_result = getattr(state["result"], "final_result", "") or ""
+            # 之前运行失败或结果为空时，自动重新计算
+            failed_markers = ["LLM分析失败", "LLM analysis failed", "分析失败", "无有效信号", "No valid signals", "暂无推荐投资信号"]
+            is_failed = any(marker in final_result for marker in failed_markers) or not final_result.strip()
+            if is_failed:
+                print(f"Cached signal for {state['trigger_time']} appears failed/empty, recomputing signal")
+                state["result"] = None
+                return "yes"
             print(f"Signal already exists for {state['trigger_time']}, skipping recompute")
             return "no"
         else:
