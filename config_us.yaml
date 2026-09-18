@@ -75,8 +75,9 @@ data_contest_config:
   history_window_days: 5
   champion_ratio: 0.30
   eliminated_ratio: 0.30
-  bench_revival_interval: 2
-  eliminated_revival_interval: 5
+  # interval=1 表示每层 agent 每轮都运行，仅按表现打 tier 标签
+  bench_revival_interval: 1
+  eliminated_revival_interval: 1
 
 # 研究层淘汰赛配置
 researcher_contest_config:
@@ -88,8 +89,9 @@ researcher_contest_config:
   window_n: 3
   champion_ratio: 0.30
   eliminated_ratio: 0.30
-  bench_revival_interval: 2
-  eliminated_revival_interval: 5
+  # interval=1 表示每层 agent 每轮都运行，仅按表现打 tier 标签
+  bench_revival_interval: 1
+  eliminated_revival_interval: 1
   fallback_to_judge: True
   # 不同风险画像的持仓天数（用于计算 forward return 和淘汰）
   holding_period_by_risk_profile:

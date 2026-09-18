@@ -233,9 +233,10 @@ class SimpleTradeCompany:
             research_contest_summary = await self.research_knockout.update_after_run(
                 current_date, current_signal_data, trigger_time
             )
-            # 默认保留 CHAMPION / BENCH 层信号，丢弃 ELIMINATED
+            # 所有 risk_profile agent 每轮都运行，tier 仅用于排序/标签展示，
+            # 最终报告保留所有层信号（CHAMPION / BENCH / ELIMINATED）
             final_signals = self.research_knockout.filter_signals(
-                all_signals, allowed_tiers=["CHAMPION", "BENCH"], min_score=None
+                all_signals, allowed_tiers=["CHAMPION", "BENCH", "ELIMINATED"], min_score=None
             )
         except Exception as e:
             print(f"⚠️ Research Knockout 更新状态失败: {e}")
