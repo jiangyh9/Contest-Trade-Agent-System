@@ -28,14 +28,21 @@ class CachedTusharePro:
         if not self.cache_dir.exists():
             self.cache_dir.mkdir(parents=True, exist_ok=True)
         token = cfg.tushare_key
-        ts.set_token(token)
-        self.pro = ts.pro_api(token)
+        self.pro = None
+        try:
+            if token:
+                ts.set_token(token)
+                self.pro = ts.pro_api(token)
+        except Exception as e:
+            print(f"[Tushare] 初始化失败（可能是 token 为空或无效）: {e}")
 
     def run(self, func_name: str, func_kwargs: dict, verbose: bool = False):
         func_kwargs_str = json.dumps(func_kwargs)
         return self.run_with_cache(func_name, func_kwargs_str, verbose)
     
     def run_with_cache(self, func_name: str, func_kwargs: str, verbose: bool = False):
+        if self.pro is None:
+            raise RuntimeError("Tushare 未初始化（token 为空或无效），无法调用接口")
         func_kwargs = json.loads(func_kwargs)
         args_hash = hashlib.md5(str(func_kwargs).encode()).hexdigest()
         func_cache_dir = self.cache_dir / func_name
@@ -97,12 +104,39 @@ def get_trade_date(cache_dir=None, verbose=False):
         if verbose:
             print(f"load trade_date from {cache_file} success")
     else:
-        if verbose:
-            print("load trade_date from tushare")
-        trade_date = pro.trade_cal(exchange="SSE")
-        trade_date.to_csv(cache_file, index=False)
-        if verbose:
-            print("load trade_date from tushare success")
+        if pro_cached.pro is not None:
+            try:
+                if verbose:
+                    print("load trade_date from tushare")
+                trade_date = pro_cached.pro.trade_cal(exchange="SSE")
+                trade_date.to_csv(cache_file, index=False)
+                if verbose:
+                    print("load trade_date from tushare success")
+            except Exception as e:
+                if verbose:
+                    print(f"load trade_date from tushare failed: {e}")
+                trade_date = None
+        else:
+            trade_date = None
+
+        # 兜底：使用 AKShare 交易日历
+        if trade_date is None:
+            try:
+                if verbose:
+                    print("load trade_date from akshare")
+                import akshare as ak
+                ak_dates = ak.tool_trade_date_hist_sina()
+                trade_date = pd.DataFrame({
+                    "exchange": ["SSE"] * len(ak_dates),
+                    "cal_date": [d.replace("-", "") for d in ak_dates["trade_date"].astype(str).tolist()],
+                    "is_open": [1] * len(ak_dates),
+                })
+                if cache_file:
+                    trade_date.to_csv(cache_file, index=False)
+                if verbose:
+                    print("load trade_date from akshare success")
+            except Exception as e2:
+                raise RuntimeError(f"无法获取交易日历（Tushare 和 AKShare 均失败）: {e2}")
 
     trade_date_list = [str(d) for d in trade_date[trade_date["is_open"] == 1]["cal_date"].values.tolist()]
     trade_date_list.sort()
