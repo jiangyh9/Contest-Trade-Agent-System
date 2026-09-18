@@ -63,7 +63,9 @@ class ToolManager:
             module = importlib.import_module(module_name)
             func = getattr(module, func_name)
             
-            if not callable(func):
+            # LangChain 的 @tool 装饰器返回 StructuredTool(BaseTool)，
+            # 它本身 callable() 为 False，但可通过 invoke/ainvoke 调用
+            if not (callable(func) or hasattr(func, "invoke") or hasattr(func, "ainvoke")):
                 raise ValueError(f"{module_path} is not callable")
             
             return self.register_function(func)
