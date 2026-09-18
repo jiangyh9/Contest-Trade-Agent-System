@@ -937,8 +937,11 @@ def display_detailed_report(final_state: Dict):
                 agent_id = signal.get('agent_id', 'N/A')
                 
                 markdown_content += f"#### {i}. {symbol_name} ({symbol_code})\n\n"
-                markdown_content += f"- **{get_text('投资动作', 'Investment Action')}**: {action}\n"
-                markdown_content += f"- **{get_text('分析来源', 'Analysis Source')}**: Research Agent {agent_id}\n\n"
+                risk_profile = signal.get('risk_profile', '')
+                source_label = f"Research Agent {agent_id}"
+                if risk_profile:
+                    source_label += f"（{risk_profile}）"
+                markdown_content += f"- **{get_text('分析来源', 'Analysis Source')}**: {source_label}\n\n"
                 
                 evidence_list = signal.get('evidence_list', [])
                 if evidence_list:
@@ -971,7 +974,11 @@ def display_detailed_report(final_state: Dict):
             
             for i, signal in enumerate(invalid_signals, 1):
                 agent_id = signal.get('agent_id', 'N/A')
-                markdown_content += f"{i}. Research Agent {agent_id} - {get_text('无明确投资机会', 'No clear investment opportunity')}\n"
+                risk_profile = signal.get('risk_profile', '')
+                source_label = f"Research Agent {agent_id}"
+                if risk_profile:
+                    source_label += f"（{risk_profile}）"
+                markdown_content += f"{i}. {source_label} - {get_text('无明确投资机会', 'No clear investment opportunity')}\n"
             
             markdown_content += "\n"
         generator.display_terminal_interactive_report(markdown_content)
