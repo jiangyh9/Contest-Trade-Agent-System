@@ -47,7 +47,12 @@ def validate_tushare_connection():
             console.print("❌ [red]Tushare连接失败 - 未获取到数据[/red]")
             return False
     except Exception as e:
-        console.print(f"❌ [red]Tushare连接失败: {str(e)}[/red]")
+        err_msg = str(e)
+        # Tushare 频率超限说明 key 有效，只是临时限流，不阻塞启动
+        if "频率超限" in err_msg or "rate limit" in err_msg.lower() or "频次" in err_msg:
+            console.print(f"⚠️  [yellow]Tushare 触发接口频次限制，key 验证通过，继续运行[/yellow]")
+            return True
+        console.print(f"❌ [red]Tushare连接失败: {err_msg}[/red]")
         return False
 
 def validate_llm_connection():
@@ -194,7 +199,7 @@ def get_trigger_time_for_market(market: str, use_now: bool = False) -> str:
         return get_trigger_time(now=datetime.now() if use_now else None)
     elif market == "US-Stock":
         # 美股市场使用美东时区时间
-        from datetime import datetime, timezone, timedelta
+        from datetime import timezone, timedelta
         
         try:
             # 尝试使用 pytz 获取美东时区
@@ -204,7 +209,6 @@ def get_trigger_time_for_market(market: str, use_now: bool = False) -> str:
             console.print(f"🇺🇸 [cyan]使用美东时区: {now.strftime('%Y-%m-%d %H:%M:%S %Z')}[/cyan]")
         except ImportError:
             # 如果没有 pytz，使用简单的时区计算（考虑夏令时）
-            from datetime import datetime
             import time
             
             # 检查是否为夏令时（简化版本：3月第二个周日到11月第一个周日）

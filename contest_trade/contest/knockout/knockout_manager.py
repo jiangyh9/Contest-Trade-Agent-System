@@ -136,7 +136,7 @@ class KnockoutTournament:
             json.dump(data, f, ensure_ascii=False, indent=2)
 
     def register_agents(self, agent_ids: List[str], agent_names: Optional[Dict[str, str]] = None, groups: Optional[Dict[str, str]] = None):
-        """注册 agent；新 agent 默认进入 BENCH"""
+        """注册 agent；新 agent 默认进入 BENCH，并设置为下一轮即可运行"""
         for aid in agent_ids:
             if aid not in self.score_cards:
                 self.score_cards[aid] = AgentScoreCard(
@@ -144,6 +144,7 @@ class KnockoutTournament:
                     agent_name=agent_names.get(aid, aid) if agent_names else aid,
                     tier="BENCH",
                     group=groups.get(aid, "default") if groups else "default",
+                    bench_skip_counter=max(0, self.bench_revival_interval - 1),
                 )
 
     def get_agent_tier(self, agent_id: str) -> str:
@@ -216,12 +217,12 @@ class KnockoutTournament:
                 "ranking": ranked,
             }
 
-            # 冷启动或所有得分没有区分度时，不淘汰
+            # 冷启动或所有得分没有区分度时，不淘汰；并让这些 agent 下一轮即可运行
             if is_cold_start or score_std < 1e-6:
                 for aid, _ in ranked:
                     card = self.score_cards[aid]
                     card.tier = "BENCH"
-                    card.bench_skip_counter = 0
+                    card.bench_skip_counter = max(0, self.bench_revival_interval - 1)
                     card.eliminated_rounds = 0
                     group_summary["bench"].append(aid)
             else:
@@ -243,6 +244,7 @@ class KnockoutTournament:
                         group_summary["eliminated"].append(aid)
                     else:
                         card.tier = "BENCH"
+                        card.bench_skip_counter = max(0, self.bench_revival_interval - 1)
                         card.eliminated_rounds = 0
                         group_summary["bench"].append(aid)
 
