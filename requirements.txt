@@ -17,4 +17,4 @@ rich
 tabulate
 akshare
 crawl4ai
-lightgbm
+lightgbmexchange_calendars>=4.0

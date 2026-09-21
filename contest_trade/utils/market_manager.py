@@ -11,6 +11,7 @@ Current Core Function:
 import sys
 from pathlib import Path
 import json
+from datetime import datetime
 
 PROJECT_ROOT = Path(__file__).parent.parent.resolve()
 sys.path.append(str(PROJECT_ROOT))
@@ -462,58 +463,85 @@ class MarketManager:
             raise ValueError(f"Invalid market: {market}")
         return df
 
+    def _refresh_trade_calendar_cache(self, trade_dates: List[str], verbose: bool = False) -> None:
+        """把交易日历写回缓存文件"""
+        try:
+            cache_file = Path(__file__).parent / "cache" / "market_manager" / "trade_calendar.json"
+            cache_file.parent.mkdir(parents=True, exist_ok=True)
+            with open(cache_file, 'w', encoding='utf-8') as f:
+                json.dump({"trade_dates": trade_dates, "updated_at": datetime.now().strftime('%Y-%m-%d %H:%M:%S')}, f)
+            if verbose:
+                print(f"更新交易日历缓存: {cache_file}，共 {len(trade_dates)} 个交易日")
+        except Exception as e:
+            if verbose:
+                print(f"交易日历缓存写入失败: {e}")
+
+    def _is_cache_stale(self, trade_dates: List[str]) -> bool:
+        """判断缓存是否过期：最新交易日早于今天则刷新"""
+        if not trade_dates:
+            return True
+        try:
+            today = datetime.now().strftime('%Y%m%d')
+            return trade_dates[-1] < today
+        except Exception:
+            return True
+
+    def _get_trade_dates_from_akshare(self, verbose: bool = False) -> List[str]:
+        """从 AKShare 获取 A股交易日历"""
+        import akshare as ak
+        if verbose:
+            print(f"使用AKShare获取CN-Stock交易日历...")
+        trade_cal = ak.tool_trade_date_hist_sina()
+        trade_dates = []
+        for date in trade_cal['trade_date']:
+            if hasattr(date, 'strftime'):
+                date_str = date.strftime('%Y%m%d')
+            else:
+                date_str = str(date).replace('-', '')
+            if date_str >= '20240101':
+                trade_dates.append(date_str)
+        return sorted(list(set(trade_dates)))
+
     def get_trade_date(self, market_name: str="CN-Stock", verbose: bool = False):
         """获取交易日历，优先级：缓存文件 -> AKShare -> Tushare"""
-        
-        # 方法1：尝试从缓存文件读取（A股相关市场）
+
+        # A股相关市场统一使用 AKShare / Tushare 交易日历
         if market_name in ["CN-Stock", "CN-ETF", "CSI300", "CSI500", "CSI1000"]:
+            trade_dates = None
+
+            # 方法1：尝试从缓存文件读取
             try:
                 cache_file = Path(__file__).parent / "cache" / "market_manager" / "trade_calendar.json"
                 if cache_file.exists():
                     with open(cache_file, 'r', encoding='utf-8') as f:
                         trade_calendar_data = json.load(f)
-                    
-                    # 简化版：所有A股相关市场都使用同一个交易日历
                     trade_dates = trade_calendar_data.get("trade_dates", [])
-                    
-                    if trade_dates:
+
+                    # 缓存过期则刷新
+                    if trade_dates and self._is_cache_stale(trade_dates):
                         if verbose:
-                            print(f"从缓存文件获取{market_name}交易日历成功: {len(trade_dates)}个交易日")
-                        return trade_dates
+                            print(f"交易日历缓存已过期（最新 {trade_dates[-1]}），尝试刷新...")
+                        trade_dates = None
             except Exception as e:
                 if verbose:
                     print(f"缓存文件读取失败: {e}")
-        
-        # 方法2：尝试使用AKShare
-        if market_name in ["CN-Stock", "CN-ETF", "CSI300", "CSI500", "CSI1000"]:
-            try:
-                import akshare as ak
-                if verbose:
-                    print(f"使用AKShare获取{market_name}交易日历...")
-                
-                trade_cal = ak.tool_trade_date_hist_sina()
-                trade_dates = []
-                
-                for date in trade_cal['trade_date']:
-                    if hasattr(date, 'strftime'):
-                        date_str = date.strftime('%Y%m%d')
-                    else:
-                        date_str = str(date).replace('-', '')
-                    
-                    # 只保留2024年以后的数据，不限制结束时间
-                    if date_str >= '20240101':
-                        trade_dates.append(date_str)
-                
-                trade_dates = sorted(list(set(trade_dates)))
-                if trade_dates:
+
+            # 方法2：缓存缺失或过期时，使用 AKShare 并写回缓存
+            if not trade_dates:
+                try:
+                    trade_dates = self._get_trade_dates_from_akshare(verbose=verbose)
+                    if trade_dates:
+                        self._refresh_trade_calendar_cache(trade_dates, verbose=verbose)
+                except Exception as e:
                     if verbose:
-                        print(f"AKShare获取{market_name}交易日历成功: {len(trade_dates)}个交易日")
-                    return trade_dates
-                    
-            except Exception as e:
+                        print(f"AKShare获取交易日历失败: {e}")
+
+            # 如果 AKShare 成功获取，直接返回
+            if trade_dates:
                 if verbose:
-                    print(f"AKShare获取交易日历失败: {e}")
-        
+                    print(f"从AKShare获取{market_name}交易日历成功: {len(trade_dates)}个交易日")
+                return trade_dates
+
         # 方法3：最后使用Tushare作为fallback
         if verbose:
             print(f"使用Tushare获取{market_name}交易日历...")

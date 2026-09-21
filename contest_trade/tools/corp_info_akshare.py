@@ -13,7 +13,7 @@ from tools.tool_utils import smart_tool
 class CompanyFinancialInput(BaseModel):
     market: str = Field(description="The market of the company.")
     symbol: str = Field(description="The symbol of the company.")
-    task: str = Field(description="The query of the financial data.")
+    task: str = Field(default="获取该公司最新财务概况（收入、利润、资产负债、现金流）", description="The query of the financial data. Defaults to latest financial overview.")
     trigger_time: str = Field(description="The trigger time of the financial data. Format: YYYY-MM-DD HH:MM:SS.")
 
 
@@ -23,7 +23,7 @@ class CompanyFinancialInput(BaseModel):
     max_output_len=4000,
     timeout_seconds=30.0
 )
-async def company_financial_info(market: str, symbol: str, task: str, trigger_time: str=None) -> str:
+async def company_financial_info(market: str, symbol: str, task: str = "获取该公司最新财务概况（收入、利润、资产负债、现金流）", trigger_time: str=None) -> str:
     if market != "CN-Stock":
         return {"error": "Currently only CN-Stock is supported for Akshare version."}
         

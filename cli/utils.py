@@ -1,6 +1,6 @@
 import questionary
 from typing import List, Optional, Tuple, Dict
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import tushare as ts
 from rich.console import Console
 import os
@@ -64,7 +64,9 @@ def validate_llm_connection():
             test_messages,
             max_tokens=32,
             temperature=0.1,
-            max_retries=0,
+            max_retries=2,
+            retry_delay=5,
+            timeout=120,
             thinking=False,
         )
         if result and hasattr(result, 'content') and result.content:
@@ -194,8 +196,6 @@ def get_trigger_time_for_market(market: str, use_now: bool = False) -> str:
         return get_trigger_time(now=datetime.now() if use_now else None)
     elif market == "US-Stock":
         # 美股市场使用美东时区时间
-        from datetime import datetime, timezone, timedelta
-        
         try:
             # 尝试使用 pytz 获取美东时区
             import pytz
@@ -204,26 +204,25 @@ def get_trigger_time_for_market(market: str, use_now: bool = False) -> str:
             console.print(f"🇺🇸 [cyan]使用美东时区: {now.strftime('%Y-%m-%d %H:%M:%S %Z')}[/cyan]")
         except ImportError:
             # 如果没有 pytz，使用简单的时区计算（考虑夏令时）
-            from datetime import datetime
             import time
-            
+
             # 检查是否为夏令时（简化版本：3月第二个周日到11月第一个周日）
             now_utc = datetime.now(timezone.utc)
             is_dst = time.daylight and time.localtime().tm_isdst > 0
-            
+
             if is_dst:
                 # 夏令时 EDT = UTC-4
                 offset_hours = -4
                 tz_name = "EDT"
             else:
-                # 标准时间 EST = UTC-5  
+                # 标准时间 EST = UTC-5
                 offset_hours = -5
                 tz_name = "EST"
-            
+
             eastern_tz = timezone(timedelta(hours=offset_hours))
             now = now_utc.astimezone(eastern_tz)
             console.print(f"🇺🇸 [cyan]使用美东时区: {now.strftime('%Y-%m-%d %H:%M:%S')} {tz_name}[/cyan]")
-        
+
         return now.strftime("%Y-%m-%d %H:%M:%S")
     else:
         return None

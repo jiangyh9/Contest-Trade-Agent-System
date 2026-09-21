@@ -23,19 +23,20 @@ llm:
   provider: "openai"
   base_url: "https://api.deepseek.com"
   api_key: "" #YOUR_DEEPSEEK_API_KEY
-  model_name: "deepseek-pro"
+  model_name: "deepseek-chat"
 
 llm_thinking:
   provider: "openai"
   base_url: "https://api.deepseek.com"
   api_key: "" #YOUR_DEEPSEEK_API_KEY
-  model_name: "deepseek-pro"
+  model_name: "deepseek-chat"
 
 vlm:
   provider: "openai"
-  base_url: "https://api.deepseek.com"
-  api_key: "" #YOUR_DEEPSEEK_API_KEY
-  model_name: "deepseek-pro"
+  # 阿里云百炼 Qwen，使用 OpenAI 兼容 Completions API
+  base_url: "https://llm-bzrmi4xxc3ili1bf.cn-beijing.maas.aliyuncs.com/compatible-mode/v1"
+  api_key: "" # 从 VLM_API_KEY 或 DASHSCOPE_API_KEY 环境变量读取
+  model_name: "qwen3.8-max"
 
 # US Market specific data agents configuration
 data_agents_config:
@@ -63,9 +64,9 @@ market_config_file: "config/market_config_us.yaml"
 
 system_language: "English"
 
-# 数据层淘汰赛配置
+# 数据层淘汰赛配置（已禁用：恢复为所有 Data Agent 并行运行，不淘汰/不打分）
 data_contest_config:
-  enabled: True
+  enabled: False
   mode: "knockout"
   history_window_days: 5
   champion_ratio: 0.30
@@ -73,9 +74,9 @@ data_contest_config:
   bench_revival_interval: 2
   eliminated_revival_interval: 5
 
-# 研究层淘汰赛配置
+# 研究层淘汰赛配置（已禁用：恢复为所有 Research Agent 并行运行，信号全部入报告）
 researcher_contest_config:
-  enabled: True
+  enabled: False
   mode: "knockout"
   judger_config: llm
   num_judgers: 3

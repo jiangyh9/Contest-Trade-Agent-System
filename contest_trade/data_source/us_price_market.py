@@ -174,8 +174,8 @@ Requirements:
             if df is not None:
                 return df
             
-            # 获取交易日
-            trade_date = get_previous_trading_date(trigger_time)
+            # 获取交易日（美股日历）
+            trade_date = get_previous_trading_date(trigger_time, market_name="US-Stock")
             logger.info(f"Getting US stock price market data for {trade_date}")
 
             # 生成LLM分析

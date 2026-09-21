@@ -63,9 +63,11 @@ class ToolManager:
             module = importlib.import_module(module_name)
             func = getattr(module, func_name)
             
-            if not callable(func):
+            # LangChain @tool 装饰器返回 StructuredTool，不是普通 callable，但支持 invoke/ainvoke
+            is_callable = callable(func) or hasattr(func, "invoke") or hasattr(func, "ainvoke")
+            if not is_callable:
                 raise ValueError(f"{module_path} is not callable")
-            
+
             return self.register_function(func)
             
         except (ImportError, AttributeError) as e:
@@ -78,7 +80,7 @@ class ToolManager:
             if isinstance(func, str):
                 name = self.register_from_module_path(func)
                 registered.append(name)
-            elif callable(func):
+            elif callable(func) or hasattr(func, "invoke") or hasattr(func, "ainvoke"):
                 name = self.register_function(func)
                 registered.append(name)
             else:

@@ -8,58 +8,102 @@ import json
 import asyncio
 import pandas as pd
 from typing import List, Dict, Any
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from functools import lru_cache
+from typing import Optional
 
 from tools.tool_utils import smart_tool
 from utils.akshare_utils import akshare_cached
 
 class StockSymbolSearchAkshareInput(BaseModel):
     market: str = Field(description="The target market. Currently supports: CN-Stock")
-    queries: List[str] = Field(description="List of search queries: company names or stock symbols (partial match supported)")
+    queries: Optional[List[str]] = Field(default=None, description="List of search queries: company names or stock symbols (partial match supported)")
+    query: Optional[str] = Field(default=None, description="Single search query (alternative to queries). Will be converted to a one-item list.")
     trigger_time: str = Field(description="The trigger time. Format: YYYY-MM-DD HH:MM:SS")
     limit_per_query: int = Field(default=5, description="Maximum number of results per query")
     match_mode: str = Field(default="best", description="Match mode: 'best' (top match), 'all' (all matches), 'exact' (exact only)")
 
+    @model_validator(mode="after")
+    def normalize_queries(self):
+        if self.queries:
+            return self
+        if self.query:
+            self.queries = [self.query]
+            return self
+        # 兜底：空查询会返回无匹配，避免 validation error
+        self.queries = []
+        return self
+
 @lru_cache(maxsize=1)
 def get_stock_basic_akshare():
-    """Get basic stock information from AKShare with caching"""
+    """Get basic stock information from AKShare with caching，主源失败时自动兜底"""
+    # 主源：东方财富实时行情
     try:
-        # 获取A股基本信息
         df = akshare_cached.run(
             func_name="stock_zh_a_spot_em",
             func_kwargs={},
             verbose=False
         )
-        
-        if df is None or df.empty:
-            raise Exception("Failed to fetch stock basic data from akshare")
-        
-        # 标准化列名
-        columns_mapping = {
-            '代码': 'ts_code',
-            '名称': 'name', 
-            '最新价': 'close',
-            '涨跌幅': 'pct_chg',
-            '总市值': 'total_mv',
-            '流通市值': 'circ_mv'
-        }
-        
-        # 只重命名存在的列
-        existing_mapping = {k: v for k, v in columns_mapping.items() if k in df.columns}
-        df = df.rename(columns=existing_mapping)
-        
-        # 确保必需的列存在
-        required_cols = ['ts_code', 'name']
-        for col in required_cols:
-            if col not in df.columns:
-                raise Exception(f"Required column {col} not found in akshare data")
-        
-        return df
-        
+        if df is not None and not df.empty:
+            columns_mapping = {
+                '代码': 'ts_code',
+                '名称': 'name',
+                '最新价': 'close',
+                '涨跌幅': 'pct_chg',
+                '总市值': 'total_mv',
+                '流通市值': 'circ_mv'
+            }
+            existing_mapping = {k: v for k, v in columns_mapping.items() if k in df.columns}
+            df = df.rename(columns=existing_mapping)
+            if 'ts_code' in df.columns and 'name' in df.columns:
+                return df
     except Exception as e:
-        print(f"Error fetching stock basic data: {e}")
-        return pd.DataFrame()
+        print(f"Error fetching stock basic data from stock_zh_a_spot_em: {e}")
+
+    # 兜底 1：A股代码+名称映射（轻量，仅用于搜索）
+    try:
+        df = akshare_cached.run(
+            func_name="stock_info_a_code_name",
+            func_kwargs={},
+            verbose=False
+        )
+        if df is not None and not df.empty:
+            rename = {}
+            if '代码' in df.columns:
+                rename['代码'] = 'ts_code'
+            if '名称' in df.columns:
+                rename['名称'] = 'name'
+            df = df.rename(columns=rename)
+            if 'ts_code' in df.columns and 'name' in df.columns:
+                return df
+    except Exception as e:
+        print(f"Error fetching stock basic data from stock_info_a_code_name: {e}")
+
+    # 兜底 2：新浪财经实时行情（数据全但较慢）
+    try:
+        df = akshare_cached.run(
+            func_name="stock_zh_a_spot",
+            func_kwargs={},
+            verbose=False
+        )
+        if df is not None and not df.empty:
+            columns_mapping = {
+                '代码': 'ts_code',
+                '名称': 'name',
+                '最新价': 'close',
+                '涨跌幅': 'pct_chg',
+                '总市值': 'total_mv',
+                '流通市值': 'circ_mv'
+            }
+            existing_mapping = {k: v for k, v in columns_mapping.items() if k in df.columns}
+            df = df.rename(columns=existing_mapping)
+            if 'ts_code' in df.columns and 'name' in df.columns:
+                return df
+    except Exception as e:
+        print(f"Error fetching stock basic data from stock_zh_a_spot: {e}")
+
+    print("All stock basic data sources failed.")
+    return pd.DataFrame()
 
 def calculate_match_score(query: str, ts_code: str, name: str) -> tuple[str, float]:
     """Calculate match score and type - matches original version exactly"""
@@ -130,12 +174,16 @@ def search_single_query(symbols_df: pd.DataFrame, query: str, limit: int, match_
     timeout_seconds=5.0
 )
 async def stock_symbol_search(
-    market: str, 
-    queries: List[str], 
-    trigger_time: str,
+    market: str,
+    queries: Optional[List[str]] = None,
+    query: Optional[str] = None,
+    trigger_time: str = "",
     limit_per_query: int = 5,
     match_mode: str = "best"
 ) -> Dict[str, Any]:
+    # 兼容只传 query 的场景
+    if not queries and query:
+        queries = [query]
     """
     Search for stock symbols using AKShare data.
     

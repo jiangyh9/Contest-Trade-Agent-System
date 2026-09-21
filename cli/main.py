@@ -930,10 +930,12 @@ def display_detailed_report(final_state: Dict):
                 action = signal.get('action', 'N/A')
                 probability = signal.get('probability', 'N/A')
                 agent_id = signal.get('agent_id', 'N/A')
-                
+                risk_profile = signal.get('risk_profile', '')
+                agent_label = f"Research Agent {agent_id} ({risk_profile})" if risk_profile else f"Research Agent {agent_id}"
+
                 markdown_content += f"#### {i}. {symbol_name} ({symbol_code})\n\n"
                 markdown_content += f"- **{get_text('投资动作', 'Investment Action')}**: {action}\n"
-                markdown_content += f"- **{get_text('分析来源', 'Analysis Source')}**: Research Agent {agent_id}\n\n"
+                markdown_content += f"- **{get_text('分析来源', 'Analysis Source')}**: {agent_label}\n\n"
                 
                 evidence_list = signal.get('evidence_list', [])
                 if evidence_list:
