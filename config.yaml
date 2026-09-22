@@ -33,7 +33,7 @@ finnhub_key: ""
 #   provider: "openai"
 #   base_url: "https://api.deepseek.com"
 #   api_key: "your_deepseek_api_key"
-#   model_name: "deepseek-chat"
+#   model_name: "deepseek-v4-pro"
 #
 # 阶跃星辰 (OpenAI compatible):
 #   provider: "openai"
@@ -58,19 +58,21 @@ llm:
   provider: "openai"
   base_url: "https://api.deepseek.com"
   api_key: "<EMPTY_KEY>"
-  model_name: "deepseek-chat"
+  model_name: "deepseek-v4-pro"
+  thinking: false
 
 llm_thinking:
   provider: "openai"
   base_url: "https://api.deepseek.com"
   api_key: "<EMPTY_KEY>"
-  model_name: "deepseek-chat"
+  model_name: "deepseek-v4-pro"
+  thinking: true
+  reasoning_effort: "high"
 
 vlm:
   provider: "openai"
-  # 阿里云百炼 Qwen，使用 OpenAI 兼容 Completions API
-  base_url: "https://llm-bzrmi4xxc3ili1bf.cn-beijing.maas.aliyuncs.com/compatible-mode/v1"
-  api_key: "<EMPTY_KEY>"  # 从 VLM_API_KEY 或 DASHSCOPE_API_KEY 环境变量读取
+  base_url: "https://dashscope.aliyuncs.com/compatible-mode/v1"
+  api_key: "<EMPTY_KEY>"
   model_name: "qwen3.8-max"
 
 

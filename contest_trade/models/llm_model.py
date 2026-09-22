@@ -159,14 +159,25 @@ class OpenAIProvider(BaseProvider):
         if max_tokens is not None:
             params["max_tokens"] = max_tokens
         
-        # Handle thinking mode for compatible models
-        if 'thinking' in params:
-            thinking_flag = params.pop('thinking')
-            if thinking_flag:
-                params['extra_body'] = {"thinking": {"type": "enabled"}}
-            else:
-                params['extra_body'] = {"thinking": {"type": "disabled"}}
-        
+        # Handle thinking mode for compatible models (DeepSeek V4)
+        thinking_flag = params.pop('thinking', None)
+        reasoning_effort = params.pop('reasoning_effort', None)
+
+        # Also check config extra_config if not passed in kwargs
+        if thinking_flag is None:
+            thinking_flag = self.config.extra_config.get('thinking')
+        if reasoning_effort is None:
+            reasoning_effort = self.config.extra_config.get('reasoning_effort')
+
+        if thinking_flag is not None or reasoning_effort is not None:
+            extra_body = params.get('extra_body', {})
+            if thinking_flag is not None:
+                extra_body["thinking"] = {"type": "enabled" if thinking_flag else "disabled"}
+            if reasoning_effort is not None:
+                params["reasoning_effort"] = reasoning_effort
+            if extra_body:
+                params['extra_body'] = extra_body
+
         return await self.async_client.chat.completions.create(**params)
     
     def process_chunk(self, chunk) -> StreamingChunk[str]:
@@ -507,9 +518,12 @@ class LLMModel(BaseAgentModel):
                 else:
                     proc_response = None
 
+                # 如果 thinking 模式把 token 配额用完了导致 content 为空，但 reasoning 有内容，
+                # 兜底用 reasoning_content 作为结果，避免下游拿到空字符串。
+                effective_content = full_content if full_content else reasoning_content
                 # Create a response with the collected content
                 return ModelResponse(
-                    content=self.postprocess_response(full_content),
+                    content=self.postprocess_response(effective_content),
                     reasoning_content=reasoning_content,
                     model_name=self.model_name,
                     raw_response=raw_chunks if raw_chunks else None,
@@ -670,23 +684,27 @@ def detect_provider(model_name: str, base_url: str = None) -> str:
 
 
 # Create global configurations with auto-detected providers
-llm_provider = cfg.llm.get("provider", detect_provider(cfg.llm["model_name"], cfg.llm.get("base_url")))
-GLOBAL_LLM_CONFIG = LLMModelConfig(
-    provider=llm_provider,
-    model_name=cfg.llm["model_name"],
-    api_key=cfg.llm.get("api_key"),
-    base_url=cfg.llm.get("base_url")
-)
+def _build_llm_config(cfg_section: dict) -> LLMModelConfig:
+    provider = cfg_section.get("provider", detect_provider(cfg_section["model_name"], cfg_section.get("base_url")))
+    base_kwargs = {
+        "provider": provider,
+        "model_name": cfg_section["model_name"],
+        "api_key": cfg_section.get("api_key"),
+        "base_url": cfg_section.get("base_url"),
+    }
+    # 透传其它参数（如 thinking / reasoning_effort）
+    extra_kwargs = {
+        k: v for k, v in cfg_section.items()
+        if k not in ("provider", "model_name", "api_key", "base_url")
+    }
+    return LLMModelConfig(**base_kwargs, **extra_kwargs)
+
+
+GLOBAL_LLM_CONFIG = _build_llm_config(cfg.llm)
 GLOBAL_LLM = LLMModel(GLOBAL_LLM_CONFIG)
 
 try:
-    thinking_provider = cfg.llm_thinking.get("provider", detect_provider(cfg.llm_thinking["model_name"], cfg.llm_thinking.get("base_url")))
-    GLOBAL_THINKING_LLM_CONFIG = LLMModelConfig(
-        provider=thinking_provider,
-        model_name=cfg.llm_thinking["model_name"],
-        api_key=cfg.llm_thinking.get("api_key"),
-        base_url=cfg.llm_thinking.get("base_url")
-    )
+    GLOBAL_THINKING_LLM_CONFIG = _build_llm_config(cfg.llm_thinking)
     assert GLOBAL_THINKING_LLM_CONFIG.api_key is not None
     GLOBAL_THINKING_LLM = LLMModel(GLOBAL_THINKING_LLM_CONFIG)
 except Exception as e:
@@ -694,13 +712,7 @@ except Exception as e:
     GLOBAL_THINKING_LLM = GLOBAL_LLM
 
 try:
-    vlm_provider = cfg.vlm.get("provider", detect_provider(cfg.vlm["model_name"], cfg.vlm.get("base_url")))
-    GLOBAL_VLM_CONFIG = LLMModelConfig(
-        provider=vlm_provider,
-        model_name=cfg.vlm["model_name"],
-        api_key=cfg.vlm.get("api_key"),
-        base_url=cfg.vlm.get("base_url")
-    )
+    GLOBAL_VLM_CONFIG = _build_llm_config(cfg.vlm)
     assert GLOBAL_VLM_CONFIG.api_key is not None
     GLOBAL_VISION_LLM = LLMModel(GLOBAL_VLM_CONFIG)
 except Exception as e:

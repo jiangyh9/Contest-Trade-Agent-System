@@ -34,8 +34,21 @@ class CachedFMPClient:
             api_key = cfg.fmp_key
         
         self.api_key = api_key
-        self.base_url = "https://financialmodelingprep.com/api/v3"
-        self.rate_limit_delay = 0.2  # API限制，每秒最多5次请求
+        # 2025-08-31 后新注册账号需使用 stable 端点，legacy /api/v3 会返回 403
+        self.base_url = "https://financialmodelingprep.com/stable"
+        self.rate_limit_delay = 0.2  # 免费计划限制，每秒最多5次请求
+        self._RESOURCE_MAP = {
+            "quote": "quote",
+            "profile": "profile",
+            "historical-price-full": "historical-price-eod/full",
+            "income-statement": "income-statement",
+            "balance-sheet-statement": "balance-sheet-statement",
+            "cash-flow-statement": "cash-flow-statement",
+            "key-metrics": "key-metrics",
+            "ratios": "ratios",
+            "market-capitalization": "market-capitalization",
+            "analyst-estimates": "analyst-estimates",
+        }
 
     def run(self, endpoint: str, params: dict, verbose: bool = False):
         """
@@ -49,17 +62,47 @@ class CachedFMPClient:
         params_str = json.dumps(params, sort_keys=True)
         return self.run_with_cache(endpoint, params_str, verbose)
     
+    def _normalize_endpoint(self, endpoint: str, params: dict) -> tuple:
+        """把旧版 /api/v3/{resource}/{symbol} 路径映射为 stable /stable/{resource}?symbol=..."""
+        endpoint = endpoint.lstrip('/')
+
+        # 去掉旧版本前缀
+        if endpoint.startswith('v3/') or endpoint.startswith('v4/'):
+            endpoint = endpoint.split('/', 1)[1]
+
+        # 旧版 stock_news?tickers=... 映射
+        if endpoint.startswith('stock_news'):
+            endpoint = endpoint.replace('stock_news', 'stock-news', 1)
+            endpoint = endpoint.replace('tickers=', 'symbol=', 1)
+            return endpoint, params
+
+        # 已经是 stable 查询串形式，直接返回
+        if '?' in endpoint:
+            return endpoint, params
+
+        parts = endpoint.split('/')
+        if len(parts) == 2 and parts[0] in self._RESOURCE_MAP:
+            resource, symbol = parts
+            endpoint = f"{self._RESOURCE_MAP[resource]}?symbol={symbol}"
+            # 避免查询串和 params 中同时出现 symbol
+            if params.get('symbol') == symbol:
+                params.pop('symbol', None)
+        elif len(parts) == 1 and parts[0] in self._RESOURCE_MAP:
+            endpoint = self._RESOURCE_MAP[parts[0]]
+
+        return endpoint, params
+
     def run_with_cache(self, endpoint: str, params_str: str, verbose: bool = False):
         params = json.loads(params_str)
-        
-        # 创建缓存文件路径
-        endpoint_clean = endpoint.replace('/', '_').lstrip('_')  # 清理endpoint路径
+
+        # 创建缓存文件路径（用原始端点前缀，去掉查询串避免非法字符）
+        endpoint_clean = endpoint.split('?')[0].replace('/', '_').lstrip('_').rstrip('_')
         cache_key = f"{endpoint_clean}_{hashlib.md5(params_str.encode()).hexdigest()}"
         endpoint_cache_dir = self.cache_dir / endpoint_clean
         if not endpoint_cache_dir.exists():
             endpoint_cache_dir.mkdir(parents=True, exist_ok=True)
         cache_file = endpoint_cache_dir / f"{cache_key}.pkl"
-        
+
         # 尝试从缓存加载
         if cache_file.exists():
             if verbose:
@@ -69,26 +112,27 @@ class CachedFMPClient:
         else:
             if verbose:
                 print(f"🌐 API请求: {endpoint} 参数: {params}")
-            
+
             # 限制API请求频率
             time.sleep(self.rate_limit_delay)
-            
+
             try:
-                # 构建完整URL
-                url = f"{self.base_url}{endpoint}"
+                # 映射到 stable 端点
+                stable_endpoint, params = self._normalize_endpoint(endpoint, params)
+                url = f"{self.base_url}/{stable_endpoint}"
                 params['apikey'] = self.api_key
-                
+
                 # 发送请求
                 response = requests.get(url, params=params)
                 response.raise_for_status()
                 result = response.json()
-                
+
                 # 保存到缓存
                 if verbose:
                     print(f"💾 保存缓存: {cache_file}")
                 with open(cache_file, "wb") as f:
                     pickle.dump(result, f)
-                
+
                 return result
             except Exception as e:
                 if verbose:
@@ -117,21 +161,26 @@ class CachedFMPClient:
             params['to'] = to_date
             
         result = self.run('/historical-price-full/' + symbol, params, verbose=verbose)
-        
-        # 转换为DataFrame
-        if result and 'historical' in result:
+
+        # 转换为DataFrame（stable API 直接返回列表，旧版 API 返回 {'historical': [...]}）
+        df = pd.DataFrame()
+        if isinstance(result, list):
+            df = pd.DataFrame(result)
+        elif result and isinstance(result, dict) and 'historical' in result:
             df = pd.DataFrame(result['historical'])
-            if not df.empty:
-                # 确保日期列是日期类型并排序
-                df['date'] = pd.to_datetime(df['date'])
-                df = df.sort_values('date').reset_index(drop=True)
-                
-                # 如果需要前复权价格，按指定基准日期调整
-                if adjusted and 'adjClose' in df.columns:
-                    df = self._use_adjusted_prices(df, adj_base_date)
-                
+
+        if df.empty:
             return df
-        return pd.DataFrame()
+
+        # 确保日期列是日期类型并排序
+        df['date'] = pd.to_datetime(df['date'])
+        df = df.sort_values('date').reset_index(drop=True)
+
+        # 如果需要前复权价格，按指定基准日期调整（stable API 无 adjClose，此分支会跳过）
+        if adjusted and 'adjClose' in df.columns:
+            df = self._use_adjusted_prices(df, adj_base_date)
+
+        return df
     
     def _use_adjusted_prices(self, df, adj_base_date=None):
         """

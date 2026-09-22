@@ -8,7 +8,7 @@ import pandas as pd
 import asyncio
 from datetime import datetime, timedelta
 from data_source.data_source_base import DataSourceBase
-from utils.fmp_utils import get_us_stock_price
+from utils.finnhub_utils import finnhub_cached
 from models.llm_model import GLOBAL_LLM
 from loguru import logger
 from utils.date_utils import get_previous_trading_date
@@ -20,10 +20,10 @@ class USPriceMarket(DataSourceBase):
         super().__init__("us_price_market")
 
     def _get_sector_performance(self, trade_date_str: str) -> dict:
-        """获取美股行业表现"""
+        """获取美股行业表现（用 Finnhub quote，免费计划支持 ETF）"""
         sector_etfs = {
             'XLK': 'Technology',
-            'XLF': 'Financial', 
+            'XLF': 'Financial',
             'XLE': 'Energy',
             'XLV': 'Healthcare',
             'XLI': 'Industrial',
@@ -34,72 +34,44 @@ class USPriceMarket(DataSourceBase):
             'XLRE': 'Real Estate',
             'XLC': 'Communication Services'
         }
-        
+
         performance_data = {}
-        
+
         for etf, sector_name in sector_etfs.items():
             try:
-                # 获取近5日数据
-                end_date = datetime.strptime(trade_date_str, "%Y%m%d")
-                start_date = end_date - timedelta(days=7)
-                
-                df = get_us_stock_price(etf, from_date=start_date.strftime("%Y-%m-%d"), 
-                                       to_date=end_date.strftime("%Y-%m-%d"), verbose=False)
-                
-                if df is not None and not df.empty and len(df) >= 2:
-                    latest = df.iloc[-1]
-                    prev = df.iloc[-2]
-                    
-                    change_pct = (latest['close'] - prev['close']) / prev['close'] * 100
-                    volume_ratio = latest['volume'] / df['volume'].mean() if df['volume'].mean() > 0 else 1
-                    
+                quote = finnhub_cached.run('quote', {'symbol': etf}, verbose=False)
+                if quote and quote.get('c') is not None and quote.get('pc', 0) > 0:
+                    change_pct = quote.get('dp', 0.0)
                     performance_data[sector_name] = {
                         'symbol': etf,
                         'change_pct': change_pct,
-                        'close': latest['close'],
-                        'volume_ratio': volume_ratio
+                        'close': quote['c'],
+                        'volume_ratio': 1.0  # Finnhub quote 不带 volume，暂不提供量比
                     }
-                    
             except Exception as e:
                 logger.warning(f"Failed to get data for {etf}({sector_name}): {e}")
                 continue
-                
+
         return performance_data
 
     def _get_market_breadth(self, trade_date_str: str) -> dict:
-        """Get market breadth data"""
-        try:
-            # 主要指数
-            indices = ['SPY', 'QQQ', 'DIA', 'IWM']
-            index_data = {}
-            
-            for symbol in indices:
-                try:
-                    end_date = datetime.strptime(trade_date_str, "%Y%m%d")
-                    start_date = end_date - timedelta(days=7)
-                    
-                    df = get_us_stock_price(symbol, from_date=start_date.strftime("%Y-%m-%d"), 
-                                           to_date=end_date.strftime("%Y-%m-%d"), verbose=False)
-                    
-                    if df is not None and not df.empty and len(df) >= 2:
-                        latest = df.iloc[-1]
-                        prev = df.iloc[-2]
-                        
-                        change_pct = (latest['close'] - prev['close']) / prev['close'] * 100
-                        index_data[symbol] = {
-                            'change_pct': change_pct,
-                            'close': latest['close'],
-                            'volume': latest['volume']
-                        }
-                        
-                except Exception:
-                    continue
-                    
-            return index_data
-            
-        except Exception as e:
-            logger.error(f"Failed to get market breadth data: {e}")
-            return {}
+        """获取主要指数表现（用 Finnhub quote）"""
+        indices = ['SPY', 'QQQ', 'DIA', 'IWM']
+        index_data = {}
+
+        for symbol in indices:
+            try:
+                quote = finnhub_cached.run('quote', {'symbol': symbol}, verbose=False)
+                if quote and quote.get('c') is not None and quote.get('pc', 0) > 0:
+                    index_data[symbol] = {
+                        'change_pct': quote.get('dp', 0.0),
+                        'close': quote['c'],
+                        'volume': None  # Finnhub quote 不带 volume
+                    }
+            except Exception:
+                continue
+
+        return index_data
 
     async def _generate_llm_summary(self, trade_date: str) -> dict:
         """Use LLM to generate market analysis summary"""
@@ -126,12 +98,9 @@ class USPriceMarket(DataSourceBase):
                 analysis_content += f"{sector_name}({data['symbol']}): {data['close']:.2f} ({data['change_pct']:+.2f}%)\n"
             
             analysis_content += "\n[Capital Flow Analysis]\n"
-            
-            # 分析成交量 TODO：FMP没有volume_ratio，后面需要补充
-            high_volume_sectors = [name for name, data in sector_data.items() if data['volume_ratio'] > 1.2]
-            if high_volume_sectors:
-                analysis_content += f"Active volume sectors: {', '.join(high_volume_sectors)}\n"
-            
+            # Finnhub free quote 不带 volume，仅做提示
+            analysis_content += "Volume data not available in free-tier quote; focus on price change and sector rotation.\n"
+
             # LLM分析
             prompt = f"""Based on the following US stock market data, generate a concise investment insight analysis (within 200 words):
 
@@ -190,45 +159,10 @@ Requirements:
             }]
             
             df = pd.DataFrame(data)
-            
-            # 检查LLM摘要中是否包含具体数据
-            llm_summary = llm_summary_dict["llm_summary"]
-            has_market_data = False
-            has_sector_data = False
-            
-            # 检查【主要指数表现】部分是否有具体数据
-            if "【主要指数表现】" in llm_summary:
-                market_section_start = llm_summary.find("【主要指数表现】")
-                market_section_end = llm_summary.find("【行业板块表现】")
-                if market_section_end == -1:
-                    market_section_end = llm_summary.find("【资金流向分析】")
-                if market_section_end == -1:
-                    market_section_end = len(llm_summary)
-                
-                market_section = llm_summary[market_section_start:market_section_end]
-                # 检查是否包含具体的指数数据（包含数字和百分号）
-                if any(char.isdigit() for char in market_section) and "%" in market_section:
-                    has_market_data = True
-            
-            # 检查【行业板块表现】部分是否有具体数据
-            if "【行业板块表现】" in llm_summary:
-                sector_section_start = llm_summary.find("【行业板块表现】")
-                sector_section_end = llm_summary.find("【资金流向分析】")
-                if sector_section_end == -1:
-                    sector_section_end = len(llm_summary)
-                
-                sector_section = llm_summary[sector_section_start:sector_section_end]
-                # 检查是否包含具体的板块数据（包含数字和百分号）
-                if any(char.isdigit() for char in sector_section) and "%" in sector_section:
-                    has_sector_data = True
-            
-            # 只有当两个部分都有具体数据时才缓存
-            if has_market_data and has_sector_data:
-                logger.info(f"Data complete, caching US stock price market data for {trade_date}")
-                self.save_data_cached(trigger_time, df)
-            else:
-                logger.warning(f"Data incomplete, skipping cache for US stock price market data for {trade_date} (market data: {has_market_data}, sector data: {has_sector_data})")
-            
+
+            logger.info(f"Caching US stock price market data for {trade_date}")
+            self.save_data_cached(trigger_time, df)
+
             return df
                 
         except Exception as e:
