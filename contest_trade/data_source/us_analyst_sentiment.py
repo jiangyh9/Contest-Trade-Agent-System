@@ -22,6 +22,10 @@ WATCHLIST = [
     "TSLA", "JPM", "UNH", "XOM", "LLY", "V"
 ]
 
+# Finnhub 免费 tier 下 price_target / institutional_ownership 通常为 403（付费）
+# 设为 False 可避免每个 run 白白浪费调用额度
+USE_PAID_FINNHUB_ENDPOINTS = False
+
 
 class USAnalystSentiment(DataSourceBase):
     def __init__(self):
@@ -60,38 +64,40 @@ class USAnalystSentiment(DataSourceBase):
                     'strong_sell': latest.get('strongSell', 0),
                 })
 
-            # 2) price target
-            pt = self._safe_run('price_target', {'symbol': symbol})
-            if isinstance(pt, dict) and pt.get('numberOfAnalysts', 0):
-                price_targets.append({
-                    'symbol': symbol,
-                    'number_of_analysts': pt.get('numberOfAnalysts', 0),
-                    'target_high': pt.get('targetHigh', 0),
-                    'target_low': pt.get('targetLow', 0),
-                    'target_mean': pt.get('targetMean', 0),
-                    'target_median': pt.get('targetMedian', 0),
-                })
+            # 2) price target（付费 endpoint，默认跳过）
+            if USE_PAID_FINNHUB_ENDPOINTS:
+                pt = self._safe_run('price_target', {'symbol': symbol})
+                if isinstance(pt, dict) and pt.get('numberOfAnalysts', 0):
+                    price_targets.append({
+                        'symbol': symbol,
+                        'number_of_analysts': pt.get('numberOfAnalysts', 0),
+                        'target_high': pt.get('targetHigh', 0),
+                        'target_low': pt.get('targetLow', 0),
+                        'target_mean': pt.get('targetMean', 0),
+                        'target_median': pt.get('targetMedian', 0),
+                    })
 
-            # 3) institutional ownership (requires paid Finnhub tier; gracefully ignored on 403)
-            io = self._safe_run('institutional_ownership', {
-                'symbol': symbol,
-                'cusip': '',
-                '_from': inst_start,
-                'to': inst_end
-            })
-            if isinstance(io, dict) and io.get('data'):
-                total_shares = 0.0
-                total_change = 0.0
-                for holder in io['data']:
-                    shares = holder.get('shares') or holder.get('totalShares') or 0
-                    change = holder.get('change') or holder.get('shareChange') or 0
-                    total_shares += float(shares) if isinstance(shares, (int, float, str)) else 0
-                    total_change += float(change) if isinstance(change, (int, float, str)) else 0
-                institutional[symbol] = {
-                    'holders': len(io['data']),
-                    'total_shares': total_shares,
-                    'net_change': total_change,
-                }
+            # 3) institutional ownership（付费 endpoint，默认跳过）
+            if USE_PAID_FINNHUB_ENDPOINTS:
+                io = self._safe_run('institutional_ownership', {
+                    'symbol': symbol,
+                    'cusip': '',
+                    '_from': inst_start,
+                    'to': inst_end
+                })
+                if isinstance(io, dict) and io.get('data'):
+                    total_shares = 0.0
+                    total_change = 0.0
+                    for holder in io['data']:
+                        shares = holder.get('shares') or holder.get('totalShares') or 0
+                        change = holder.get('change') or holder.get('shareChange') or 0
+                        total_shares += float(shares) if isinstance(shares, (int, float, str)) else 0
+                        total_change += float(change) if isinstance(change, (int, float, str)) else 0
+                    institutional[symbol] = {
+                        'holders': len(io['data']),
+                        'total_shares': total_shares,
+                        'net_change': total_change,
+                    }
 
         return {
             'recommendations': recommendations,
