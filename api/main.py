@@ -84,7 +84,12 @@ def _run_job_sync(job_id: str) -> None:
 
 @app.post("/api/analyze")
 async def analyze(req: AnalyzeRequest, background_tasks: BackgroundTasks):
-    """提交分析任务，返回 job_id"""
+    """提交分析任务，返回 job_id。本实例仅服务 A 股（CN-Stock）。"""
+    if req.market != "CN-Stock":
+        return JSONResponse(
+            status_code=400,
+            content={"error": "本实例仅支持 A 股（CN-Stock），请使用单独的 US-Stock 实例"},
+        )
     job_id = str(uuid.uuid4())
     job_dir = JOBS_DIR / job_id
     job_dir.mkdir(parents=True, exist_ok=True)
