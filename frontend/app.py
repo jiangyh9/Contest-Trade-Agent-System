@@ -141,12 +141,16 @@ try:
     jobs = jobs_resp.json().get("jobs", [])
     if jobs:
         for j in jobs[:10]:
-            cols = st.columns([2, 1, 1, 1, 2])
-            cols[0].code(j.get("job_id", ""))
+            jid = j.get("job_id", "")
+            cols = st.columns([2, 1, 1, 1, 2, 1])
+            cols[0].code(jid)
             cols[1].write(j.get("market", ""))
             cols[2].write(j.get("status", ""))
             cols[3].write(j.get("stage", ""))
             cols[4].write(j.get("trigger_time", ""))
+            if cols[5].button("查看", key=f"view_{jid}"):
+                st.session_state.job_id = jid
+                st.rerun()
     else:
         st.info("暂无任务")
 except Exception as e:
