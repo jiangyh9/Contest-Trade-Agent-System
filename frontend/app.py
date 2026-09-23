@@ -6,8 +6,10 @@ import os
 import time
 from datetime import datetime
 
+import markdown
 import requests
 import streamlit as st
+import streamlit.components.v1 as components
 
 API_BASE = os.getenv("API_BASE_URL", "http://localhost:8000")
 POLL_INTERVAL = 2  # 秒
@@ -41,6 +43,28 @@ def _render_evidence(evidence: list) -> str:
         else:
             lines.append(f"**{idx}.** {item}")
     return "\n\n".join(lines)
+
+
+def _scrollable_markdown(md_text: str, height: int = 360) -> None:
+    """在固定高度的可滚动区域内渲染 Markdown，避免页面过长"""
+    html = markdown.markdown(md_text or "无内容", extensions=["tables", "fenced_code"])
+    components.html(
+        f"""
+        <div style="
+            height: {height}px;
+            overflow-y: auto;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 12px 16px;
+            background: #fafafa;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        ">
+            {html}
+        </div>
+        """,
+        height=height,
+        scrolling=True,
+    )
 
 
 # 侧边栏：提交任务
@@ -117,7 +141,7 @@ if job_id:
                     title = agent.get("agent_name", "unknown")
                     with st.expander(title, expanded=True):
                         ctx = agent.get("context") or agent.get("context_preview", "")
-                        st.markdown(ctx or "无内容")
+                        _scrollable_markdown(ctx, height=360)
 
                 st.subheader(f"Research Agent 信号（共 {len(result.get('signals', []))} 个）")
                 for idx, sig in enumerate(result.get("signals", []), 1):
@@ -135,17 +159,17 @@ if job_id:
                         thinking = sig.get("thinking", "")
                         if thinking:
                             with st.expander("推理过程"):
-                                st.markdown(thinking)
+                                _scrollable_markdown(thinking, height=240)
 
                         evidence = sig.get("evidence_list")
                         if evidence:
                             with st.expander("证据链"):
-                                st.markdown(_render_evidence(evidence))
+                                _scrollable_markdown(_render_evidence(evidence), height=240)
 
                         limitations = sig.get("limitations", "")
                         if limitations:
                             with st.expander("风险提示 / 局限"):
-                                st.markdown(limitations)
+                                _scrollable_markdown(limitations, height=160)
             else:
                 st.warning("结果文件尚未生成")
         except Exception as e:
