@@ -87,7 +87,7 @@ class ContestTradeDisplay:
     @staticmethod
     def _extract_risk_profile_from_belief(belief: str) -> str:
         """从 belief 文本中提取风险画像"""
-        profiles = ["风险偏好者", "稳健投资者", "激进套利者", "防御套利者"]
+        profiles = ["激进短线", "稳健防御"]
         for profile in profiles:
             if profile in belief:
                 return profile
@@ -414,7 +414,7 @@ class ContestTradeDisplay:
                 summary_text.append(get_text(f"\n🎯 有效信号: {len(valid_signals)}", f"\n🎯 Valid Signals: {len(valid_signals)}"), style="bold red")
                 
                 # 按 risk_profile 分组
-                profile_order = ["风险偏好者", "稳健投资者", "激进套利者", "防御套利者"]
+                profile_order = ["激进短线", "稳健防御"]
                 grouped = {p: [] for p in profile_order}
                 for signal in valid_signals:
                     profile = signal.get('risk_profile', '未指定')

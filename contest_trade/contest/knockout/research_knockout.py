@@ -73,7 +73,7 @@ class ResearchKnockoutContest:
 
         def extract_risk_profile(belief: str) -> str:
             # 从 belief 文本中匹配风险画像关键词
-            profiles = ["风险偏好者", "稳健投资者", "激进套利者", "防御套利者"]
+            profiles = ["激进短线", "稳健防御"]
             for p in profiles:
                 if p in belief:
                     return p

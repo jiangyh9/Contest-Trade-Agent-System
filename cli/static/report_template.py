@@ -238,7 +238,7 @@ class FinalReportGenerator:
         
         if valid_signals:
             # 按风险偏好分组
-            profile_order = ["风险偏好者", "稳健投资者", "激进套利者", "防御套利者"]
+            profile_order = ["激进短线", "稳健防御"]
             grouped_signals = {profile: [] for profile in profile_order}
             for signal in valid_signals:
                 profile = signal.get('risk_profile', '未指定')

@@ -309,7 +309,7 @@ class SimpleTradeCompany:
     @staticmethod
     def _extract_risk_profile_from_belief(belief: str) -> str:
         """从 belief 文本中提取风险画像关键词"""
-        profiles = ["风险偏好者", "稳健投资者", "激进套利者", "防御套利者"]
+        profiles = ["激进短线", "稳健防御"]
         for profile in profiles:
             if profile in belief:
                 return profile

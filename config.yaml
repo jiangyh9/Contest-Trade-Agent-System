@@ -162,7 +162,5 @@ researcher_contest_config:
   fallback_to_judge: True
   # 不同风险画像的持仓天数（用于计算 forward return 和淘汰）
   holding_period_by_risk_profile:
-    激进套利者: 1
-    风险偏好者: 1
-    稳健投资者: 5
-    防御套利者: 3
+    激进短线: 1
+    稳健防御: 5
