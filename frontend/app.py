@@ -11,8 +11,8 @@ import streamlit as st
 API_BASE = os.getenv("API_BASE_URL", "http://localhost:8000")
 POLL_INTERVAL = 2  # 秒
 
-st.set_page_config(page_title="ContestTrade", layout="wide")
-st.title("ContestTrade A 股分析平台")
+st.set_page_config(page_title="多Agent投研辅助平台", layout="wide")
+st.title("多Agent投研辅助平台")
 
 # 侧边栏：提交任务
 with st.sidebar:
