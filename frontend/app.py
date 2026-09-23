@@ -12,16 +12,16 @@ API_BASE = os.getenv("API_BASE_URL", "http://localhost:8000")
 POLL_INTERVAL = 2  # 秒
 
 st.set_page_config(page_title="ContestTrade", layout="wide")
-st.title("ContestTrade 内部分析平台")
+st.title("ContestTrade A 股分析平台")
 
 # 侧边栏：提交任务
 with st.sidebar:
     st.header("新建分析任务")
-    market = st.selectbox("市场", ["US-Stock", "CN-Stock"], index=0)
+    market = st.selectbox("市场", ["CN-Stock"], index=0)
     trigger_time = st.text_input(
         "触发时间（可选）",
-        placeholder="例如 2026-09-23 09:00:00，留空使用当前时间",
-        help="留空时后端会根据所选市场自动计算当前交易日",
+        placeholder="例如 2026-09-23 09:30:00，留空使用当前交易日",
+        help="留空时后端会根据 A 股交易日自动计算当前触发时间",
     )
     start_btn = st.button("开始分析", type="primary")
 
