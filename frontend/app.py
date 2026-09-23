@@ -98,15 +98,17 @@ if job_id:
 
                 st.subheader(f"Research Agent 信号（共 {len(result.get('signals', []))} 个）")
                 for idx, sig in enumerate(result.get("signals", []), 1):
-                    with st.expander(f"Agent {idx} - {sig.get('risk_profile', '')}"):
-                        for s in sig.get("extracted", []):
-                            st.markdown(
-                                f"- **{s.get('symbol_code', '')} {s.get('symbol_name', '')}** "
-                                f"| 动作：{s.get('action', '')} | 概率：{s.get('probability', '')} "
-                                f"| 画像：{s.get('risk_profile', '')}"
-                            )
-                        st.markdown("**原始摘要预览**")
-                        st.text(sig.get("raw_preview", ""))
+                    title = f"{sig.get('symbol_code', '')} {sig.get('symbol_name', '')} - {sig.get('risk_profile', '')}"
+                    with st.expander(f"信号 {idx}：{title}"):
+                        st.markdown(
+                            f"- **标的**：{sig.get('symbol_code', '')} {sig.get('symbol_name', '')}\n"
+                            f"- **动作**：{sig.get('action', '')}\n"
+                            f"- **概率**：{sig.get('probability', '')}\n"
+                            f"- **画像**：{sig.get('risk_profile', '')}\n"
+                            f"- **有机会**：{sig.get('has_opportunity', '')}"
+                        )
+                        with st.expander("证据摘要"):
+                            st.text(sig.get("evidence_preview", ""))
             else:
                 st.warning("结果文件尚未生成")
         except Exception as e:
