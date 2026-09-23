@@ -67,8 +67,8 @@ class ResearchAgentConfig:
     def __init__(self, agent_name: str = "research_agent", belief: str = "", holding_period: int = 1):
         self.agent_name = agent_name
         self.belief = belief
-        self.holding_period = holding_period
-        self.max_react_step = cfg.research_agent_config["max_react_step"]
+        self.holding_period = int(holding_period)
+        self.max_react_step = int(cfg.research_agent_config.get("max_react_step", 10))
         self.tool_config = ToolManagerConfig(cfg.research_agent_config["tools"])
         self.output_language = cfg.system_language
         if 'plan' in cfg.research_agent_config:
@@ -246,6 +246,18 @@ class ResearchAgent:
     async def _enough_information(self, state: ResearchAgentState) -> str:
         """判断是否足够信息"""
         try:
+            # 先把硬停止条件放前面，避免后续格式化/LLM异常导致永远停不下来
+            max_react_step = int(self.config.max_react_step) if self.config.max_react_step is not None else 10
+            if state["tool_call_count"] >= max_react_step:
+                logger.info(f"Reached max_react_step ({max_react_step}), forcing write_result")
+                return "enough_information"
+
+            selected_tool = state["selected_tool"]
+            if not selected_tool or "error" in selected_tool:
+                return "not_enough_information"
+            if selected_tool.get("tool_name") == "final_report":
+                return "enough_information"
+
             estimated_context = prompt_for_research_write_result.format(
                 current_time=state["trigger_time"],
                 task=state["task"],
@@ -258,16 +270,11 @@ class ResearchAgent:
             )
 
             if count_tokens(estimated_context) > 128000:
-                return "enough_information"
-
-            selected_tool = state["selected_tool"]
-            if "error" in selected_tool:
-                return "not_enough_information"
-            if selected_tool["tool_name"] == "final_report" or \
-                state["tool_call_count"] >= self.config.max_react_step:
+                logger.info("Context too long, forcing write_result")
                 return "enough_information"
         except Exception as e:
             logger.error(f"Error in enough_information: {e}")
+            # 发生异常时仍然允许继续调用工具；但 tool_call_count 会兜底
         return "not_enough_information"
 
 
@@ -417,14 +424,14 @@ class ResearchAgent:
             result=None
         )
         print(f"🚀 Research Agent Starting - {input.trigger_time}")
-        async for event in self.app.astream_events(initial_state, version="v2", config=config or RunnableConfig(recursion_limit=50)):
+        async for event in self.app.astream_events(initial_state, version="v2", config=config or RunnableConfig(recursion_limit=100)):
             yield event
 
     async def run_with_monitoring(self, input: ResearchAgentInput) -> ResearchAgentOutput:
         """使用事件流监控运行Agent"""
         print(f"🚀 Research Agent Starting - {input.trigger_time}")
         final_result = None
-        async for event in self.run_with_monitoring_events(input, RunnableConfig(recursion_limit=50)):
+        async for event in self.run_with_monitoring_events(input, RunnableConfig(recursion_limit=100)):
             event_type = event["event"]
             if event_type == "on_chain_start":
                 node_name = event["name"]
