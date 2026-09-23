@@ -115,24 +115,22 @@ if job_id:
                 st.subheader("Data Agent 因子摘要")
                 for agent in result.get("data_agents", []):
                     title = agent.get("agent_name", "unknown")
-                    with st.expander(title):
+                    with st.expander(title, expanded=True):
                         ctx = agent.get("context") or agent.get("context_preview", "")
                         st.markdown(ctx or "无内容")
 
                 st.subheader(f"Research Agent 信号（共 {len(result.get('signals', []))} 个）")
                 for idx, sig in enumerate(result.get("signals", []), 1):
-                    title = (
-                        f"{sig.get('symbol_code', '')} {sig.get('symbol_name', '')}"
-                        f" - {sig.get('risk_profile', '')}"
-                    )
-                    with st.expander(f"信号 {idx}：{title}"):
+                    with st.container(border=True):
                         st.markdown(
-                            f"- **标的**：{sig.get('symbol_code', '')} {sig.get('symbol_name', '')}\n"
-                            f"- **动作**：{sig.get('action', '')}\n"
-                            f"- **概率**：{sig.get('probability', '')}\n"
-                            f"- **画像**：{sig.get('risk_profile', '')}\n"
-                            f"- **有机会**：{sig.get('has_opportunity', '')}"
+                            f"#### {idx}. {sig.get('symbol_code', '')} {sig.get('symbol_name', '')}"
+                            f" <span style='color:gray'>| {sig.get('risk_profile', '')}</span>",
+                            unsafe_allow_html=True,
                         )
+                        cols = st.columns([1, 1, 1, 1])
+                        cols[0].metric("动作", sig.get("action", "-"))
+                        cols[1].metric("概率", sig.get("probability", "-"))
+                        cols[2].metric("有机会", sig.get("has_opportunity", "-"))
 
                         thinking = sig.get("thinking", "")
                         if thinking:
