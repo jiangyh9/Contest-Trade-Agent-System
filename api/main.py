@@ -7,6 +7,7 @@ import os
 import subprocess
 import sys
 import uuid
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict
 
@@ -94,9 +95,9 @@ async def analyze(req: AnalyzeRequest, background_tasks: BackgroundTasks):
     job_dir = JOBS_DIR / job_id
     job_dir.mkdir(parents=True, exist_ok=True)
 
-    # 保存请求
+    # 保存请求（仅保留 market，强制即时触发，不支持历史回测）
     (job_dir / "request.json").write_text(
-        json.dumps(req.model_dump(), ensure_ascii=False, indent=2),
+        json.dumps({"market": req.market}, ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
 
@@ -107,7 +108,7 @@ async def analyze(req: AnalyzeRequest, background_tasks: BackgroundTasks):
             "status": "pending",
             "stage": "pending",
             "market": req.market,
-            "trigger_time": req.trigger_time,
+            "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         }, ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
@@ -125,6 +126,10 @@ def list_jobs():
         if status_file.exists():
             data = json.loads(status_file.read_text(encoding="utf-8"))
             data.pop("_raw_result", None)
+            if not data.get("created_at"):
+                data["created_at"] = datetime.fromtimestamp(
+                    status_file.stat().st_mtime
+                ).strftime("%Y-%m-%d %H:%M:%S")
             jobs.append(data)
     return {"jobs": jobs}
 

@@ -37,18 +37,21 @@ def _extract_signal_basics(final_result_text: str) -> list[dict]:
 
 
 def _save_summary(final_state: dict, job_dir: Path) -> None:
-    """保存结果摘要和完整 pickle"""
+    """保存结果摘要和完整 pickle（保留完整上下文，前端不再截断）"""
     data_factors = final_state.get("data_factors", []) or []
     research_signals = final_state.get("research_signals", []) or []
 
+    def _full_context(factor) -> str:
+        ctx = getattr(factor, "context_string", "") or factor.get("context_string", "")
+        return ctx or ""
+
     summary = {
-        "trigger_time": final_state.get("trigger_time"),
         "data_factors_count": len(data_factors),
         "research_signals_count": len(research_signals),
         "data_agents": [
             {
                 "agent_name": getattr(f, "agent_name", None) or f.get("agent_name", "unknown"),
-                "context_preview": (getattr(f, "context_string", "") or f.get("context_string", ""))[:200],
+                "context": _full_context(f),
             }
             for f in data_factors
         ],
@@ -64,6 +67,10 @@ def _save_summary(final_state: dict, job_dir: Path) -> None:
         else:
             sig_dict = {}
 
+        evidence = sig_dict.get("evidence_list", [])
+        if not isinstance(evidence, list):
+            evidence = []
+
         summary["signals"].append({
             "symbol_code": sig_dict.get("symbol_code", ""),
             "symbol_name": sig_dict.get("symbol_name", ""),
@@ -72,7 +79,9 @@ def _save_summary(final_state: dict, job_dir: Path) -> None:
             "probability": sig_dict.get("probability", ""),
             "has_opportunity": sig_dict.get("has_opportunity", ""),
             "belief": sig_dict.get("belief", ""),
-            "evidence_preview": str(sig_dict.get("evidence_list", ""))[:500],
+            "thinking": sig_dict.get("thinking", ""),
+            "limitations": sig_dict.get("limitations", ""),
+            "evidence_list": evidence,
         })
 
     (job_dir / "result_summary.json").write_text(
@@ -102,7 +111,7 @@ def main() -> None:
     trigger_time = request.get("trigger_time") or get_trigger_time_for_market(market, use_now=True)
 
     status_file = job_dir / "status.json"
-    update_status(status_file, status="running", stage="data_agents", trigger_time=trigger_time)
+    update_status(status_file, status="running", stage="data_agents")
 
     try:
         company = SimpleTradeCompany()

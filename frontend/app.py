@@ -1,9 +1,10 @@
 """
 ContestTrade Streamlit 前端（内部使用）
-调用后端 FastAPI，提交任务、轮询进度、展示结果。
+调用后端 FastAPI，即时触发分析、轮询进度、展示结果。
 """
 import os
 import time
+from datetime import datetime
 
 import requests
 import streamlit as st
@@ -13,6 +14,34 @@ POLL_INTERVAL = 2  # 秒
 
 st.set_page_config(page_title="多Agent投研辅助平台", layout="wide")
 st.title("多Agent投研辅助平台")
+
+
+def _fmt_time(ts: str | None) -> str:
+    """把时间字符串格式化为紧凑显示"""
+    if not ts:
+        return "-"
+    try:
+        dt = datetime.strptime(ts, "%Y-%m-%d %H:%M:%S")
+        return dt.strftime("%m-%d %H:%M")
+    except Exception:
+        return str(ts)
+
+
+def _render_evidence(evidence: list) -> str:
+    """把证据列表渲染成 Markdown"""
+    if not isinstance(evidence, list) or not evidence:
+        return "暂无证据"
+    lines = []
+    for idx, item in enumerate(evidence, 1):
+        if isinstance(item, dict):
+            desc = item.get("description", "")
+            src = item.get("from_source", "")
+            t = item.get("time", "")
+            lines.append(f"**{idx}.** {desc}  `{src}` {t}".strip())
+        else:
+            lines.append(f"**{idx}.** {item}")
+    return "\n\n".join(lines)
+
 
 # 侧边栏：提交任务
 with st.sidebar:
@@ -33,23 +62,21 @@ if "submitted" not in st.session_state:
 # 提交任务
 if start_btn:
     payload = {"market": market}
-
     try:
         resp = requests.post(f"{API_BASE}/api/analyze", json=payload, timeout=10)
         resp.raise_for_status()
         data = resp.json()
         st.session_state.job_id = data["job_id"]
         st.session_state.submitted = True
-        st.success(f"任务已提交：`{data['job_id']}`")
+        st.success("任务已提交，正在分析…")
     except Exception as e:
         st.error(f"提交失败：{e}")
 
 # 任务详情页
 job_id = st.session_state.job_id
 if job_id:
-    st.header(f"任务 {job_id}")
+    st.header("任务详情")
     status_placeholder = st.empty()
-    details_placeholder = st.empty()
 
     # 轮询直到完成/失败
     while True:
@@ -87,12 +114,17 @@ if job_id:
 
                 st.subheader("Data Agent 因子摘要")
                 for agent in result.get("data_agents", []):
-                    with st.expander(agent.get("agent_name", "unknown")):
-                        st.write(agent.get("context_preview", ""))
+                    title = agent.get("agent_name", "unknown")
+                    with st.expander(title):
+                        ctx = agent.get("context") or agent.get("context_preview", "")
+                        st.markdown(ctx or "无内容")
 
                 st.subheader(f"Research Agent 信号（共 {len(result.get('signals', []))} 个）")
                 for idx, sig in enumerate(result.get("signals", []), 1):
-                    title = f"{sig.get('symbol_code', '')} {sig.get('symbol_name', '')} - {sig.get('risk_profile', '')}"
+                    title = (
+                        f"{sig.get('symbol_code', '')} {sig.get('symbol_name', '')}"
+                        f" - {sig.get('risk_profile', '')}"
+                    )
                     with st.expander(f"信号 {idx}：{title}"):
                         st.markdown(
                             f"- **标的**：{sig.get('symbol_code', '')} {sig.get('symbol_name', '')}\n"
@@ -101,20 +133,25 @@ if job_id:
                             f"- **画像**：{sig.get('risk_profile', '')}\n"
                             f"- **有机会**：{sig.get('has_opportunity', '')}"
                         )
-                        with st.expander("证据摘要"):
-                            st.text(sig.get("evidence_preview", ""))
+
+                        thinking = sig.get("thinking", "")
+                        if thinking:
+                            with st.expander("推理过程"):
+                                st.markdown(thinking)
+
+                        evidence = sig.get("evidence_list")
+                        if evidence:
+                            with st.expander("证据链"):
+                                st.markdown(_render_evidence(evidence))
+
+                        limitations = sig.get("limitations", "")
+                        if limitations:
+                            with st.expander("风险提示 / 局限"):
+                                st.markdown(limitations)
             else:
                 st.warning("结果文件尚未生成")
         except Exception as e:
             st.error(f"读取结果失败：{e}")
-
-        # 报告（HTML/Markdown）
-        st.subheader("报告")
-        report_resp = requests.get(f"{API_BASE}/api/jobs/{job_id}/report", timeout=10)
-        if report_resp.status_code == 200:
-            st.components.v1.html(report_resp.text, height=800, scrolling=True)
-        else:
-            st.info(report_resp.json().get("error", "暂无报告"))
 
     elif status_text == "failed":
         st.error(f"分析失败：{status.get('error', 'unknown error')}")
@@ -126,25 +163,29 @@ if job_id:
         except Exception:
             pass
 
-# 历史任务列表
+# 历史任务列表（只展示成功有结果的）
 st.markdown("---")
 st.header("最近任务")
 try:
     jobs_resp = requests.get(f"{API_BASE}/api/jobs", timeout=10)
     jobs_resp.raise_for_status()
-    jobs = jobs_resp.json().get("jobs", [])
-    if jobs:
-        for j in jobs[:10]:
+    all_jobs = jobs_resp.json().get("jobs", [])
+    completed_jobs = [
+        j for j in all_jobs
+        if j.get("status") == "completed" and j.get("market") == "CN-Stock"
+    ]
+
+    if completed_jobs:
+        for j in completed_jobs[:20]:
             jid = j.get("job_id", "")
-            cols = st.columns([2, 1, 1, 1, 1])
-            cols[0].code(jid)
-            cols[1].write(j.get("market", ""))
-            cols[2].write(j.get("status", ""))
-            cols[3].write(j.get("stage", ""))
-            if cols[4].button("查看", key=f"view_{jid}"):
+            signal_count = j.get("research_signals_count", "-")
+            cols = st.columns([2, 2, 1])
+            cols[0].write(_fmt_time(j.get("created_at")))
+            cols[1].write(f"{signal_count} 个信号")
+            if cols[2].button("查看", key=f"view_{jid}"):
                 st.session_state.job_id = jid
                 st.rerun()
     else:
-        st.info("暂无任务")
+        st.info("暂无已完成任务")
 except Exception as e:
     st.error(f"获取历史任务失败：{e}")
