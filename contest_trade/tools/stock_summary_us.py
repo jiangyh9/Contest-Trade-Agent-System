@@ -4,6 +4,7 @@ Data Summary Based On Finnhub + FMP for US Market
 """
 import asyncio
 import hashlib
+import re
 from pathlib import Path
 from pydantic import BaseModel, Field
 from utils.fmp_utils import fmp_cached
@@ -29,8 +30,16 @@ def _fmt_value(value, fmt: str = ".2f") -> str:
         return "NA"
 
 
+def _normalize_symbol(symbol: str) -> str:
+    """标准化美股代码：去空格、大写、去掉 .NYSE/.NASDAQ 等交易所后缀"""
+    symbol = symbol.strip().upper()
+    symbol = re.sub(r'\.(NYSE|NASDAQ|BATS|AMEX|BZX|IEX|OTC)$', '', symbol)
+    return symbol
+
+
 def get_stock_name_by_code(symbol, market):
     """通过 Finnhub 公司资料获取股票名称"""
+    symbol = _normalize_symbol(symbol)
     try:
         if market == "US-Stock":
             profile = finnhub_cached.run('company_profile2', {'symbol': symbol}, verbose=False)
@@ -42,27 +51,57 @@ def get_stock_name_by_code(symbol, market):
 
 
 def _fetch_us_kline(symbol: str, trigger_time: str, lookback_days: int = 365) -> pd.DataFrame:
-    """Fetch US stock daily data using FMP historical price."""
+    """Fetch US stock daily data using FMP historical price; fallback to Finnhub stock_candles."""
+    symbol = _normalize_symbol(symbol)
+
+    trigger_date_str = trigger_time.split(" ")[0]
+    trigger_dt = datetime.strptime(trigger_date_str, "%Y-%m-%d")
+    end_dt = trigger_dt - timedelta(days=1)
+    start_dt = trigger_dt - timedelta(days=lookback_days)
+    start_date = start_dt.strftime("%Y-%m-%d")
+    end_date = end_dt.strftime("%Y-%m-%d")
+
+    # 1) FMP
     try:
-        trigger_date_str = trigger_time.split(" ")[0]
-        trigger_dt = datetime.strptime(trigger_date_str, "%Y-%m-%d")
-        end_date = (trigger_dt - timedelta(days=1)).strftime("%Y-%m-%d")
-        start_date = (trigger_dt - timedelta(days=lookback_days)).strftime("%Y-%m-%d")
-
         df = fmp_cached.get_historical_price(symbol, from_date=start_date, to_date=end_date, verbose=False)
-        if df is None or df.empty:
-            return pd.DataFrame()
-
-        df = df.copy()
-        df['date'] = pd.to_datetime(df['date'])
-        for col in ['open', 'high', 'low', 'close', 'volume']:
-            if col in df.columns:
-                df[col] = pd.to_numeric(df[col], errors='coerce')
-        df = df.sort_values('date').reset_index(drop=True)
-        return df
+        if df is not None and not df.empty:
+            df = df.copy()
+            df['date'] = pd.to_datetime(df['date'])
+            for col in ['open', 'high', 'low', 'close', 'volume']:
+                if col in df.columns:
+                    df[col] = pd.to_numeric(df[col], errors='coerce')
+            df = df.sort_values('date').reset_index(drop=True)
+            return df
     except Exception as e:
-        print(f"Failed to fetch K-line data for {symbol}: {e}")
-        return pd.DataFrame()
+        print(f"FMP K-line failed for {symbol}: {e}")
+
+    # 2) Finnhub candles fallback
+    try:
+        from_ts = int(start_dt.timestamp())
+        to_ts = int(end_dt.timestamp())
+        candles = finnhub_cached.run(
+            'stock_candles',
+            {'symbol': symbol, 'resolution': 'D', '_from': from_ts, 'to': to_ts},
+            verbose=False,
+        )
+        if candles and 's' in candles and candles['s'] == 'ok':
+            df = pd.DataFrame({
+                'date': candles['t'],
+                'open': candles['o'],
+                'high': candles['h'],
+                'low': candles['l'],
+                'close': candles['c'],
+                'volume': candles['v'],
+            })
+            df['date'] = pd.to_datetime(df['date'], unit='s')
+            for col in ['open', 'high', 'low', 'close', 'volume']:
+                df[col] = pd.to_numeric(df[col], errors='coerce')
+            df = df.sort_values('date').reset_index(drop=True)
+            return df
+    except Exception as e:
+        print(f"Finnhub K-line fallback failed for {symbol}: {e}")
+
+    return pd.DataFrame()
 
 
 def _compute_indicators(df: pd.DataFrame) -> dict:
@@ -141,6 +180,7 @@ async def _get_financial_summary_async(symbol: str, trigger_time: str) -> str:
 
 def _get_company_profile_summary(symbol: str) -> str:
     """获取公司行业/市值等摘要"""
+    symbol = _normalize_symbol(symbol)
     try:
         profile = finnhub_cached.run('company_profile2', {'symbol': symbol}, verbose=False)
         if not isinstance(profile, dict):
@@ -157,6 +197,7 @@ def _get_company_profile_summary(symbol: str) -> str:
 
 def _get_recent_news(symbol: str, trigger_time: str, days: int = 7, limit: int = 10) -> str:
     """获取 symbol 近 N 天新闻（Finnhub company_news）"""
+    symbol = _normalize_symbol(symbol)
     try:
         trigger_date_str = trigger_time.split(" ")[0]
         end_dt = datetime.strptime(trigger_date_str, "%Y-%m-%d")

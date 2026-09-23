@@ -9,7 +9,7 @@ from datetime import datetime, timedelta
 
 from pydantic import BaseModel, Field
 from utils.fmp_utils import fmp_cached, get_us_stock_quote as _fmp_get_us_stock_quote
-from utils.finnhub_utils import get_us_stock_price
+from utils.finnhub_utils import get_us_stock_price, finnhub_cached
 from tools.tool_utils import smart_tool
 
 
@@ -19,39 +19,76 @@ class PriceInfoInput(BaseModel):
     trigger_time: str = Field(description="The trigger time of the financial data. Format: YYYY-MM-DD HH:MM:SS.")
 
 
-def _get_us_stock_daily_price(symbol: str, trigger_time: str, lookback_days: int = 180) -> pd.DataFrame:
-    """通过 FMP 获取历史日K线"""
-    try:
-        trigger_date_str = trigger_time.split(" ")[0]
-        trigger_dt = datetime.strptime(trigger_date_str, "%Y-%m-%d")
-        # 历史数据取到 trigger 前一天，避免未来数据泄漏
-        to_dt = trigger_dt - timedelta(days=1)
-        from_dt = trigger_dt - timedelta(days=lookback_days)
+def _normalize_symbol(symbol: str) -> str:
+    """标准化美股代码：去空格、大写、去掉 .NYSE/.NASDAQ 等交易所后缀"""
+    symbol = symbol.strip().upper()
+    # 去掉常见交易所后缀，但保留 BRK-B 这类带 '-' 的代码
+    import re
+    symbol = re.sub(r'\.(NYSE|NASDAQ|BATS|AMEX|BZX|IEX|OTC)$', '', symbol)
+    return symbol
 
+
+def _get_us_stock_daily_price(symbol: str, trigger_time: str, lookback_days: int = 180) -> pd.DataFrame:
+    """通过 FMP 获取历史日K线；失败时回退到 Finnhub stock_candles"""
+    symbol = _normalize_symbol(symbol)
+
+    trigger_date_str = trigger_time.split(" ")[0]
+    trigger_dt = datetime.strptime(trigger_date_str, "%Y-%m-%d")
+    # 历史数据取到 trigger 前一天，避免未来数据泄漏
+    to_dt = trigger_dt - timedelta(days=1)
+    from_dt = trigger_dt - timedelta(days=lookback_days)
+
+    # 1) 先尝试 FMP
+    try:
         df = fmp_cached.get_historical_price(
             symbol,
             from_date=from_dt.strftime("%Y-%m-%d"),
             to_date=to_dt.strftime("%Y-%m-%d"),
             verbose=False,
         )
-        if df is None or df.empty:
-            return pd.DataFrame()
-
-        # 统一列名并确保类型
-        df = df.copy()
-        df['date'] = pd.to_datetime(df['date'])
-        for col in ['open', 'high', 'low', 'close', 'volume']:
-            if col in df.columns:
-                df[col] = pd.to_numeric(df[col], errors='coerce')
-        df = df.sort_values('date').reset_index(drop=True)
-        return df
+        if df is not None and not df.empty:
+            df = df.copy()
+            df['date'] = pd.to_datetime(df['date'])
+            for col in ['open', 'high', 'low', 'close', 'volume']:
+                if col in df.columns:
+                    df[col] = pd.to_numeric(df[col], errors='coerce')
+            df = df.sort_values('date').reset_index(drop=True)
+            return df
     except Exception as e:
-        print(f"获取 {symbol} 历史价格时出错: {e}")
-        return pd.DataFrame()
+        print(f"FMP 获取 {symbol} 历史价格失败: {e}")
+
+    # 2) 回退到 Finnhub stock_candles
+    try:
+        from_ts = int(from_dt.timestamp())
+        to_ts = int(to_dt.timestamp())
+        candles = finnhub_cached.run(
+            'stock_candles',
+            {'symbol': symbol, 'resolution': 'D', '_from': from_ts, 'to': to_ts},
+            verbose=False,
+        )
+        if candles and 's' in candles and candles['s'] == 'ok':
+            df = pd.DataFrame({
+                'date': candles['t'],
+                'open': candles['o'],
+                'high': candles['h'],
+                'low': candles['l'],
+                'close': candles['c'],
+                'volume': candles['v'],
+            })
+            df['date'] = pd.to_datetime(df['date'], unit='s')
+            for col in ['open', 'high', 'low', 'close', 'volume']:
+                df[col] = pd.to_numeric(df[col], errors='coerce')
+            df = df.sort_values('date').reset_index(drop=True)
+            return df
+    except Exception as e:
+        print(f"Finnhub 获取 {symbol} 历史价格失败: {e}")
+
+    return pd.DataFrame()
 
 
 def _get_us_stock_quote(symbol: str) -> Dict[str, Any]:
     """通过 FMP 获取实时报价；失败时回退到 Finnhub quote"""
+    symbol = _normalize_symbol(symbol)
     quote: Dict[str, Any] = {}
     try:
         result = _fmp_get_us_stock_quote(symbol, verbose=False)
@@ -104,6 +141,8 @@ def _get_us_stock_quote(symbol: str) -> Dict[str, Any]:
 async def price_info(market: str, symbol: str, trigger_time: str = None) -> Dict[str, Any]:
     if market != "US-Stock":
         return {"error": "Market not supported. This tool only supports US-Stock."}
+
+    symbol = _normalize_symbol(symbol)
 
     try:
         # 历史价格
