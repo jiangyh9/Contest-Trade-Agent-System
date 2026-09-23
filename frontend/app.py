@@ -18,11 +18,7 @@ st.title("多Agent投研辅助平台")
 with st.sidebar:
     st.header("新建分析任务")
     market = st.selectbox("市场", ["CN-Stock"], index=0)
-    trigger_time = st.text_input(
-        "触发时间（可选）",
-        placeholder="例如 2026-09-23 09:30:00，留空使用当前交易日",
-        help="留空时后端会根据 A 股交易日自动计算当前触发时间",
-    )
+    st.caption("点击“开始分析”即以当前时间触发，不支持历史回测。")
     start_btn = st.button("开始分析", type="primary")
 
     st.markdown("---")
@@ -37,8 +33,6 @@ if "submitted" not in st.session_state:
 # 提交任务
 if start_btn:
     payload = {"market": market}
-    if trigger_time and trigger_time.strip():
-        payload["trigger_time"] = trigger_time.strip()
 
     try:
         resp = requests.post(f"{API_BASE}/api/analyze", json=payload, timeout=10)
@@ -142,13 +136,12 @@ try:
     if jobs:
         for j in jobs[:10]:
             jid = j.get("job_id", "")
-            cols = st.columns([2, 1, 1, 1, 2, 1])
+            cols = st.columns([2, 1, 1, 1, 1])
             cols[0].code(jid)
             cols[1].write(j.get("market", ""))
             cols[2].write(j.get("status", ""))
             cols[3].write(j.get("stage", ""))
-            cols[4].write(j.get("trigger_time", ""))
-            if cols[5].button("查看", key=f"view_{jid}"):
+            if cols[4].button("查看", key=f"view_{jid}"):
                 st.session_state.job_id = jid
                 st.rerun()
     else:
