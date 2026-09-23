@@ -1,0 +1,50 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: api/Dockerfile
+    container_name: contesttrade-backend
+    env_file:
+      - .env
+    environment:
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - ./agents_workspace:/app/agents_workspace
+      - ./backtest_results:/app/backtest_results
+      - ./jobs:/app/jobs
+      - ./contest_trade/config:/app/contest_trade/config:ro
+    networks:
+      - contesttrade-net
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    container_name: contesttrade-frontend
+    environment:
+      - API_BASE_URL=http://backend:8000
+    depends_on:
+      - backend
+    networks:
+      - contesttrade-net
+    restart: unless-stopped
+
+  nginx:
+    image: nginx:alpine
+    container_name: contesttrade-nginx
+    ports:
+      - "8080:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - backend
+      - frontend
+    networks:
+      - contesttrade-net
+    restart: unless-stopped
+
+networks:
+  contesttrade-net:

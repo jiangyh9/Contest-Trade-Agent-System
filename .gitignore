@@ -235,3 +235,7 @@ test*
 *copy*
 *tmp*
 *_cache
+
+# ContestTrade runtime artifacts
+jobs/
+backtest_results/
