@@ -1,0 +1,6 @@
+schema_version: 1
+name: a-share-market-analysis
+runtime: python
+entrypoint: scripts/cli.py
+requires:
+  ai: true
