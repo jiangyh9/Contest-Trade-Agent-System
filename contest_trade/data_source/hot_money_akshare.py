@@ -12,6 +12,7 @@
 import pandas as pd
 import asyncio
 import traceback
+import requests
 from datetime import datetime, timedelta
 from data_source.data_source_base import DataSourceBase
 from utils.akshare_utils import akshare_cached
@@ -138,24 +139,60 @@ class HotMoneyAkshare(DataSourceBase):
             return pd.DataFrame()
 
     def get_concept_data(self) -> pd.DataFrame:
-        """获取概念板块资金流数据"""
+        """获取概念板块行情。push2 会直接断开，改用 data.eastmoney.com。"""
         try:
-            df = akshare_cached.run(
-                func_name="stock_board_concept_name_em",
-                func_kwargs={},
-                verbose=False
-            )
-            
+            df = self._fetch_concept_board()
             if df.empty:
                 logger.warning("无概念板块数据")
                 return pd.DataFrame()
-            
+
             logger.info(f"获取概念板块数据成功，{len(df)} 条记录")
             return df
-            
+
         except Exception as e:
             logger.error(f"获取概念板块数据失败: {e}")
             return pd.DataFrame()
+
+    def _fetch_concept_board(self) -> pd.DataFrame:
+        """概念板块按涨跌幅排序。涨跌幅原始值是百分数乘 100。"""
+        url = "https://data.eastmoney.com/dataapi/bkzj/getbkzj"
+        headers = {
+            "User-Agent": "Mozilla/5.0",
+            "Referer": "https://data.eastmoney.com/bkzj/gn.html",
+        }
+        merged = {}
+        for key in ("f3", "f104", "f105"):
+            response = requests.get(
+                url,
+                params={"key": key, "code": "m:90+t:3"},
+                headers=headers,
+                timeout=15,
+            )
+            response.raise_for_status()
+            for item in (response.json().get("data") or {}).get("diff") or []:
+                code = item.get("f12")
+                if not code:
+                    continue
+                row = merged.setdefault(code, {"板块名称": item.get("f14")})
+                if item.get("f14"):
+                    row["板块名称"] = item["f14"]
+                if item.get(key) is not None:
+                    row[key] = item[key]
+
+        records = []
+        for row in merged.values():
+            if not row.get("板块名称") or row.get("f3") is None:
+                continue
+            records.append({
+                "板块名称": row["板块名称"],
+                "涨跌幅": row["f3"] / 100,
+                "上涨家数": int(row["f104"]) if row.get("f104") is not None else 0,
+                "下跌家数": int(row["f105"]) if row.get("f105") is not None else 0,
+            })
+        df = pd.DataFrame(records)
+        if df.empty:
+            return df
+        return df.sort_values("涨跌幅", ascending=False, ignore_index=True)
 
     def get_yyb_data(self) -> pd.DataFrame:
         """获取游资营业部资金数据"""
