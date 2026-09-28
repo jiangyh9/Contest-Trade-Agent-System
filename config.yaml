@@ -102,6 +102,7 @@ research_agent_config:
     - "tools.technical_analysis_akshare.realtime_quote"
     - "tools.technical_analysis_akshare.technical_indicators"
     - "tools.technical_analysis_akshare.intraday_fund_flow"
+    - "tools.individual_stock_research_akshare.individual_stock_research"
     - "tools.search_web.search_web"
     - "tools.stock_summary_akshare.stock_summary"
     - "tools.final_report.final_report"

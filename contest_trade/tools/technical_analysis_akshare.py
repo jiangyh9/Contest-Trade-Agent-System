@@ -205,8 +205,9 @@ async def technical_indicators(market: str, symbol: str, trigger_time: str) -> d
                 "MACD": round(float(latest["MACD"]), 4),
             },
             "RSI": {"RSI14": round(float(latest["RSI14"]), 3)},
-            "recent_5_days": df[["date", "open", "high", "low", "close", "volume", "MA5", "MA10", "K", "D", "J", "DIF", "DEA", "MACD", "RSI14"]]
-            .tail(5)
+            "recent_3_days": df[["date", "open", "high", "low", "close", "volume", "MA5", "MA10", "K", "D", "J", "DIF", "DEA", "MACD", "RSI14"]]
+            .tail(3)
+            .astype({"date": "str"})
             .to_dict(orient="records"),
         }
         return {"result": result}
