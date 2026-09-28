@@ -1,13 +1,13 @@
 ---
 name: a-share-market-analysis
 description: >-
-  从宏观新闻、股票相关资讯、大盘走势和资金流向来对 A 股市场进行综合分析。
+  从宏观新闻、股票相关资讯、大盘走势和资金流向来对 A 股市场进行综合分析；也可对指定个股做利好/利空对照分析，不给投资建议。
 disable-model-invocation: true
 ---
 
 # A 股市场综合分析
 
-> 🚨 本 Skill 通过 `scripts/cli.py` 调用本地 MCP SSE 服务取数，禁止手写裸请求。
+> 🚨 本 Skill 通过 `scripts/cli.py` 调用本地 MCP SSE 服务取数。
 >
 > 📁 运行位置：Skill 根目录（`~/.cursor/skills/a-share-market-analysis/`）。
 >
@@ -15,7 +15,7 @@ disable-model-invocation: true
 
 ## 一句话能力
 
-整合新浪财经新闻、同花顺资讯、A 股大盘走势、热钱资金流向 4 类数据，生成 A 股市场综合分析报告。
+整合新浪财经新闻、同花顺资讯、A 股大盘走势、热钱资金流向，以及指定个股的利好/利空对照分析。个股分析不给投资建议。
 
 ## 何时使用
 
@@ -27,12 +27,13 @@ disable-model-invocation: true
 - “看看大盘、热点、龙虎榜”
 - “新闻/资讯” / “最近有什么财经新闻”
 - “大盘走势分析” / “热钱资金流向”
+- “分析一下茅台 / 600519” / “这只股票利好利空”
 
 ### ❌ 不触发场景
 
-- 个股诊断、个股财报分析（应使用 `individual_stock_research` 类工具）
 - 美股、港股分析（应使用 US Market 相关 Skill）
 - 纯概念解释、常识问答（不调用 MCP）
+- 用户要买入/卖出建议、目标价、仓位（本 Skill 只做分析，应明确拒绝给投资建议）
 
 ## 快速调用
 
@@ -56,31 +57,41 @@ python scripts/cli.py a_share_market_overview
 # 热钱资金流向
 python scripts/cli.py a_share_hot_money
 
-# 综合分析：上面 4 个一起调
+# 个股利好/利空分析
+python scripts/cli.py a_share_stock_analysis 600519
+python scripts/cli.py a_share_stock_analysis 贵州茅台
+
+# 综合分析：上面市场 4 个一起调
 ```
 
 ## MCP 服务与 Tool
 
-| 项 | 值 |
-|---|---|
-| `service_name` | `a_share_analysis` |
-| 本地 SSE | `http://127.0.0.1:8000/server/mcp/a_share_analysis/sse` |
 
-| Tool 名称 | 功能 | 对应原 Data Agent |
-|---|---|---|
-| `sina_news_summary` | 新浪财经新闻摘要 | `sina_summary_agent` |
-| `thx_news_summary` | 同花顺股票资讯摘要 | `thx_summary_agent` |
-| `a_share_market_overview` | A 股大盘走势分析 | `price_market_agent` |
-| `a_share_hot_money` | A 股热钱资金流向分析 | `hot_money_agent` |
+| 项              | 值                                                       |
+| -------------- | ------------------------------------------------------- |
+| `service_name` | `a_share_analysis`                                      |
+| 本地 SSE         | `http://127.0.0.1:8000/server/mcp/a_share_analysis/sse` |
+
+
+
+| Tool 名称                   | 功能          | 对应原 Data Agent       |
+| ------------------------- | ----------- | -------------------- |
+| `sina_news_summary`       | 新浪财经新闻摘要    | `sina_summary_agent` |
+| `thx_news_summary`        | 同花顺股票资讯摘要   | `thx_summary_agent`  |
+| `a_share_market_overview` | A 股大盘走势分析   | `price_market_agent` |
+| `a_share_hot_money`       | A 股热钱资金流向分析 | `hot_money_agent`    |
+| `a_share_stock_analysis`  | 指定个股利好/利空分析，不给投资建议 | 市场 4 路摘要 + 个股数据 |
+
 
 每个 Tool 的详细参数、返回结构、失败排查见 `references/` 目录：
 
-- [`references/sina_news_summary.md`](references/sina_news_summary.md)
-- [`references/thx_news_summary.md`](references/thx_news_summary.md)
-- [`references/a_share_market_overview.md`](references/a_share_market_overview.md)
+- `[references/sina_news_summary.md](references/sina_news_summary.md)`
+- `[references/thx_news_summary.md](references/thx_news_summary.md)`
+- `[references/a_share_market_overview.md](references/a_share_market_overview.md)`
 - [`references/a_share_hot_money.md`](references/a_share_hot_money.md)
+- [`references/a_share_stock_analysis.md`](references/a_share_stock_analysis.md)
 
-4 个 Data Source 的本地实现细节见 [`references/data_sources.md`](references/data_sources.md)。
+4 个 Data Source 的本地实现细节见 `[references/data_sources.md](references/data_sources.md)`。
 
 ## 执行工作流
 
@@ -88,12 +99,15 @@ python scripts/cli.py a_share_hot_money
 
 根据用户问题，决定调用哪些 Tool：
 
-| 用户意图 | 调用的 Tool |
-|---|---|
-| “新闻” / “资讯” / “财经新闻” | 同时调用 `sina_news_summary` + `thx_news_summary` |
-| “大盘走势” / “市场走势” | 仅 `a_share_market_overview` |
-| “热钱” / “龙虎榜” / “资金流向” | 仅 `a_share_hot_money` |
-| “综合分析” / “今天A股怎么样” | 同时调用 4 个 Tool |
+
+| 用户意图                  | 调用的 Tool                                      |
+| --------------------- | --------------------------------------------- |
+| “新闻” / “资讯” / “财经新闻”  | 同时调用 `sina_news_summary` + `thx_news_summary` |
+| “大盘走势” / “市场走势”       | 仅 `a_share_market_overview`                   |
+| “热钱” / “龙虎榜” / “资金流向” | 仅 `a_share_hot_money`                         |
+| “分析一下茅台 / 600519 / 这只股票” | 仅 `a_share_stock_analysis`，必须带股票代码或名称 |
+| “综合分析” / “今天A股怎么样”    | 同时调用市场 4 个 Tool                                 |
+
 
 ### 步骤 2：调用 Tool
 
@@ -101,6 +115,7 @@ python scripts/cli.py a_share_hot_money
 
 ```bash
 python scripts/cli.py <tool_name>
+python scripts/cli.py a_share_stock_analysis <股票代码或名称>
 ```
 
 `trigger_time` 固定为当前提问/调用时间，不支持历史回测。大盘/热钱类 Tool 会自动取上一个交易日。
@@ -112,19 +127,18 @@ python scripts/cli.py <tool_name>
 ```json
 {
   "success": true,
-  "count": 1052,
+  "count": 1,
   "data": [
-    {"title": "...", "content": "...", "pub_time": "...", "url": "..."}
+    {"title": "...", "content": "...", "pub_time": "...", "url": null}
   ]
 }
 ```
 
-- 新闻类 Tool：`count` 可能大于 1
-- 大盘/热钱类 Tool：`count` 通常为 1，`content` 是 LLM 生成的分析文本
+所有市场 Tool 和市场背景都返回 `count: 1`，`content` 是分析/摘要文本。个股 Tool 同样返回 1 条利好/利空对照报告。
 
 ### 步骤 4：合并输出报告
 
-把 4 个 Tool 的结果按以下结构合并，再交给 LLM 做一次最终统稿：
+把市场 4 个 Tool 的结果按以下结构合并，再交给 LLM 做一次最终统稿：
 
 ```markdown
 # A 股市场综合分析报告（{trade_date}）
@@ -161,14 +175,19 @@ python scripts/cli.py <tool_name>
 7. **热点板块与个股**：概念热度、涨停/跌停概况
 8. **风险提示**：数据延迟、市场情绪变化等
 
+个股分析时，直接输出 `a_share_stock_analysis` 的报告，不要改写成买入/卖出建议。
+
 ## 注意事项
 
-| 情况 | 处理 |
-|---|---|
-| 本地服务未启动 | 提示用户先运行 `python local_mcp_server.py` |
-| 新闻类 Tool 返回 `count: 0` | 可能是非交易时间，提示“新闻数据为空” |
-| 大盘/热钱类 Tool 失败 | 依赖 akshare，可能是接口升级或网络问题 |
-| 缺参 | 不要凭印象瞎填，先向用户确认 |
+
+| 情况                     | 处理                                   |
+| ---------------------- | ------------------------------------ |
+| 本地服务未启动                | 提示用户先运行 `python local_mcp_server.py` |
+| 新闻类 Tool 返回空内容 | 可能是非交易时间，提示“新闻数据为空”                  |
+| 大盘/热钱类 Tool 失败         | 依赖 akshare，可能是接口升级或网络问题              |
+| 缺参                     | 不要凭印象瞎填，先向用户确认                       |
+| 个股分析未给代码/名称         | 先追问标的，不要猜测                                 |
+
 
 ## 响应前自查
 
