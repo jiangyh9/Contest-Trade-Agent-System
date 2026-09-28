@@ -5,6 +5,7 @@
 import pandas as pd
 import asyncio
 import traceback
+import requests
 from datetime import datetime
 from data_source.data_source_base import DataSourceBase
 from utils.akshare_utils import akshare_cached
@@ -191,55 +192,79 @@ class PriceMarketAkshare(DataSourceBase):
     
     def get_sector_summary(self, trade_date: str) -> str:
         """
-        获取板块资金流向摘要
+        获取行业板块资金流向摘要。
+
+        push2.eastmoney.com 会在返回 HTTP 状态码前断开连接，这里改用
+        板块资金流页面正在使用的 data.eastmoney.com 接口。
         """
         try:
-            # 获取板块资金流向数据
-            df = akshare_cached.run(
-                func_name="stock_board_industry_name_em",
-                func_kwargs={},
-                verbose=False
-            )
-            
-            if df.empty:
+            boards = self._fetch_industry_fund_flow()
+            if not boards:
                 return "无板块资金流向数据"
-            
-            summary_lines = [f"{trade_date} 板块资金流向情况（东方财富数据）：\n"]
-            
-            # 取前10个板块
-            top_sectors = df.head(10)
-            
-            for _, row in top_sectors.iterrows():
-                try:
-                    sector_name = row['板块名称']
-                    latest_price = row['最新价']
-                    change_amount = row['涨跌额']
-                    change_rate = row['涨跌幅']
-                    market_cap = row['总市值'] / 100000000  # 转换为亿元
-                    turnover_rate = row['换手率']
-                    up_count = row['上涨家数']
-                    down_count = row['下跌家数']
-                    leading_stock = row['领涨股票']
-                    leading_change = row['领涨股票-涨跌幅']
-                    
-                    change_sign = "+" if change_amount >= 0 else ""
-                    rate_sign = "+" if change_rate >= 0 else ""
-                    
-                    summary_lines.append(
-                        f"**{sector_name}**: 最新价 {latest_price:.2f}, "
-                        f"涨跌 {change_sign}{change_amount:.2f} ({rate_sign}{change_rate:.2f}%), "
-                        f"总市值 {market_cap:.0f}亿, 换手率 {turnover_rate:.2f}%, "
-                        f"上涨 {up_count} 下跌 {down_count}, 领涨股 {leading_stock} ({leading_change:+.2f}%)"
-                    )
-                except Exception as e:
-                    logger.warning(f"处理板块数据行失败: {e}")
-                    continue
-            
+
+            summary_lines = [
+                f"{trade_date} 行业板块资金流向（东方财富，按主力净流入排序）：\n",
+                "主力净流入前10：",
+            ]
+            for row in boards[:10]:
+                summary_lines.append(self._format_sector_flow_line(row))
+
+            if len(boards) > 10:
+                summary_lines.append("\n主力净流出前5：")
+                for row in reversed(boards[-5:]):
+                    summary_lines.append(self._format_sector_flow_line(row))
+
             return "\n".join(summary_lines)
-            
+
         except Exception as e:
             logger.error(f"获取板块资金流向失败: {e}")
             return f"获取板块资金流向失败: {str(e)}"
+
+    def _fetch_industry_fund_flow(self) -> list:
+        """拉取东方财富行业板块资金流。涨跌幅、净占比的原始值是百分数乘 100。"""
+        url = "https://data.eastmoney.com/dataapi/bkzj/getbkzj"
+        headers = {
+            "User-Agent": "Mozilla/5.0",
+            "Referer": "https://data.eastmoney.com/bkzj/hy.html",
+        }
+        fields = ("f62", "f3", "f184", "f6", "f104", "f105")
+        merged = {}
+        for key in fields:
+            response = requests.get(
+                url,
+                params={"key": key, "code": "m:90+s:4"},
+                headers=headers,
+                timeout=15,
+            )
+            response.raise_for_status()
+            for item in (response.json().get("data") or {}).get("diff") or []:
+                code = item.get("f12")
+                if not code:
+                    continue
+                row = merged.setdefault(code, {"name": item.get("f14")})
+                if item.get("f14"):
+                    row["name"] = item["f14"]
+                if item.get(key) is not None:
+                    row[key] = item[key]
+
+        rows = [
+            row for row in merged.values()
+            if row.get("name") and row.get("f62") is not None
+        ]
+        rows.sort(key=lambda row: row["f62"], reverse=True)
+        return rows
+
+    def _format_sector_flow_line(self, row: dict) -> str:
+        parts = [f"主力净流入 {row['f62'] / 1e8:+.2f}亿"]
+        if row.get("f3") is not None:
+            parts.insert(0, f"涨跌幅 {row['f3'] / 100:+.2f}%")
+        if row.get("f184") is not None:
+            parts.append(f"净占比 {row['f184'] / 100:+.2f}%")
+        if row.get("f6") is not None:
+            parts.append(f"成交额 {row['f6'] / 1e8:.0f}亿")
+        if row.get("f104") is not None and row.get("f105") is not None:
+            parts.append(f"上涨 {int(row['f104'])} 下跌 {int(row['f105'])}")
+        return f"**{row['name']}**: " + ", ".join(parts)
     
     def generate_kline_charts_base64(self, kline_data: dict, trade_date: str) -> dict:
         """
