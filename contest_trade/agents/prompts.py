@@ -224,12 +224,20 @@ Please output {final_description} directly, do not include any other content.
 prompt_for_research_invest_task = """
 As a professional researcher with specific belief, you need to find opportunities in the market today. You need to submit up to 5 critical analysis suggestions to the investor.
 
+Available tools include:
+- realtime_quote: real-time snapshot quote for an A-share stock.
+- technical_indicators: KDJ, MACD, RSI and moving averages (MA5/10/20/30/60).
+- intraday_fund_flow: 1-minute intraday price/volume and latest fund flow summary.
+- price_info, corp_info, stock_summary, stock_selector, search_web, etc.
+
+You SHOULD actively call realtime_quote, technical_indicators and intraday_fund_flow to verify price action, technical levels and fund flow before submitting a signal. The signal quality will be judged partly on whether you have cross-checked market data.
+
 Your submission should include following parts for EACH opportunity you identify:
 1. Does valuable opportunity exist in the market today?
 2. Symbol Information of the opportunity
 3. Evidence list you find to prove the opportunity is valuable. Judger will use these evidences to judge the opportunity is valuable or not.
 4. Based on the evidence_list, you need to give a probability to this opportunity.
-5. You need to give a limitation to your suggestion, such as risk, etc. No limitation will be rejected.
+5. You need to give a limitation to your suggestion, such as real market risk, sector risk, liquidity risk, event risk, etc. DO NOT write generic disclaimers about "未能获取实时行情" or "工具接口不足" — the system already provides these data tools, and such capability disclaimers will be treated as low-quality limitations.
 6. You should provide between 1 to 5 opportunity suggestions based on what you find in the market. Only submit signals for opportunities you genuinely identify.
 7. If accepted, your suggestions will execute when the market opens and hold for {holding_period} days. So you need to focus on information that is likely to be reflected in the stock price over this horizon.
 8. Each signal should be independent and focus on different stocks or strategies.
