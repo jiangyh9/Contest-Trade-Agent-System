@@ -2,7 +2,7 @@
 Research Agent Knockout Contest - 研究层淘汰赛
 
 职责：
-1. 按 risk_profile 把 Research Agent 分组，组内独立淘汰。
+1. 对采用不同独立收益来源的 Research Agent 进行统一比较。
 2. 历史信号用实际收益率打分；当日信号没有未来收益时，用 judge 评分或 probability 作为替代分。
 3. 每轮决定哪些 Research Agent 运行，并过滤最终输出信号。
 4. 最终只保留各组冠军层（CHAMPION）或高分信号进入报告。
@@ -48,7 +48,7 @@ class ResearchKnockoutContest:
 
         self.tournament = KnockoutTournament(
             state_dir=self.state_dir,
-            tournament_name="research_agent",
+            tournament_name="research_strategy",
             champion_ratio=champion_ratio,
             eliminated_ratio=eliminated_ratio,
             bench_revival_interval=bench_revival_interval,
@@ -61,37 +61,43 @@ class ResearchKnockoutContest:
         self.fallback_to_judge = fallback_to_judge
         self.num_judgers = num_judgers
 
-        # 读取风险画像持仓期配置（默认1天）
+        # 读取策略持仓期配置（默认1天）
         research_cfg = getattr(cfg, "researcher_contest_config", {}) or {}
-        self.holding_period_by_risk_profile = research_cfg.get("holding_period_by_risk_profile", {})
+        self.holding_period_by_strategy = research_cfg.get(
+            "holding_period_by_strategy",
+            research_cfg.get("holding_period_by_risk_profile", {}),
+        )
+        self.agent_strategies: Dict[str, str] = {}
         self.default_holding_period = 1
 
     def register_agents(self, agent_beliefs: List[str]):
-        """注册 Research Agent，默认按 belief 中的风险画像分组"""
+        """注册 Research Agent，并记录每个 Agent 的独立策略来源。"""
         agent_ids = [f"agent_{i}" for i in range(len(agent_beliefs))]
         agent_names = {aid: aid for aid in agent_ids}
 
-        def extract_risk_profile(belief: str) -> str:
-            # 从 belief 文本中匹配风险画像关键词
-            profiles = ["风险偏好者", "稳健投资者", "激进套利者", "防御套利者"]
-            for p in profiles:
-                if p in belief:
-                    return p
+        def extract_strategy(belief: str) -> str:
+            strategies = ["强势动量", "趋势确认", "防御轮动", "反转修复"]
+            for strategy in strategies:
+                if strategy in belief:
+                    return strategy
             return "default"
 
-        groups = {f"agent_{i}": extract_risk_profile(belief) for i, belief in enumerate(agent_beliefs)}
+        self.agent_strategies = {
+            f"agent_{i}": extract_strategy(belief) for i, belief in enumerate(agent_beliefs)
+        }
+        # 四种策略必须处于同一个竞赛组，否则每组只有一个 Agent，无法形成排名。
+        groups = {agent_id: "ETF策略" for agent_id in agent_ids}
         self.tournament.register_agents(agent_ids, agent_names=agent_names, groups=groups)
 
     def _get_holding_period(self, agent_name: str, signal: Optional[SignalData] = None) -> int:
-        """根据 agent 所属 risk_profile 获取持仓期"""
-        # 优先从 tournament 的 group 推断
-        card = self.tournament.score_cards.get(agent_name)
-        if card and card.group in self.holding_period_by_risk_profile:
-            return self.holding_period_by_risk_profile[card.group]
+        """根据 Agent 的策略来源获取持仓期。"""
+        strategy = self.agent_strategies.get(agent_name)
+        if strategy in self.holding_period_by_strategy:
+            return self.holding_period_by_strategy[strategy]
         # 其次从 signal 的 belief 文本推断
         if signal and signal.belief:
-            for profile, period in self.holding_period_by_risk_profile.items():
-                if profile in signal.belief:
+            for strategy, period in self.holding_period_by_strategy.items():
+                if strategy in signal.belief:
                     return period
         return self.default_holding_period
 
@@ -232,7 +238,7 @@ class ResearchKnockoutContest:
             else:
                 merged_scores[agent_name] = 0.0
 
-        # 按 risk_profile 分组进行独立淘汰
+        # 四种独立策略在同一组中比较风险调整后的历史表现
         group_by = {aid: card.group for aid, card in self.tournament.score_cards.items()}
         summary = self.tournament.record_scores_and_update_tiers(merged_scores, round_date, group_by=group_by)
         self.tournament.save_state()

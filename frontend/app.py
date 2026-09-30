@@ -51,13 +51,13 @@ col1, col2 = st.sidebar.columns(2)
 with col1:
     start_date = st.date_input(
         "开始日期",
-        value=datetime(2025, 8, 1),
+        value=datetime(2026, 9, 14),
         max_value=datetime.today(),
     )
 with col2:
     end_date = st.date_input(
         "结束日期",
-        value=datetime(2025, 8, 15),
+        value=datetime(2026, 9, 18),
         max_value=datetime.today(),
     )
 
@@ -68,7 +68,8 @@ run_button = st.sidebar.button("🚀 运行回测", type="primary")
 st.sidebar.markdown("---")
 st.sidebar.info(
     "回测模式只使用支持历史 trigger_time 的数据源（Tushare/AKShare），\n"
-    "并禁用 web search，避免未来信息泄漏。"
+    "并禁用 web search，避免未来信息泄漏。\n\n"
+    "建议先用 5 个交易日验证，整段跑完约 15-30 分钟。"
 )
 
 
@@ -190,7 +191,7 @@ with tab_leaderboard:
     st.info("下方展示每个 Research Agent 在不同日期的 contest_score 变化。")
 
     # 读取 contest state
-    contest_state_file = PROJECT_ROOT / "agents_workspace" / "contest_state" / "research_agent_knockout_state.json"
+    contest_state_file = PROJECT_ROOT / "agents_workspace" / "contest_state" / "research_strategy_knockout_state.json"
     if contest_state_file.exists():
         with open(contest_state_file, "r", encoding="utf-8") as f:
             state = json.load(f)
@@ -243,10 +244,10 @@ with tab_signals:
             for i, signal in enumerate(signals, 1):
                 profile = signal.get("risk_profile", "未指定")
                 color = {
-                    "风险偏好者": "red",
-                    "稳健投资者": "blue",
-                    "激进套利者": "orange",
-                    "防御套利者": "green",
+                    "强势动量": "red",
+                    "趋势确认": "blue",
+                    "防御轮动": "green",
+                    "反转修复": "orange",
                 }.get(profile, "gray")
 
                 with st.expander(

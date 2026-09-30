@@ -48,6 +48,9 @@ class ProjectConfig:
         # Store the market type for reference
         self.market_type = market_type
 
+        # Wind JDBC 配置优先从环境变量读取（连接串含密码，不进仓库）
+        self._load_wind_jdbc_from_env()
+
     def _load_secrets_from_env(self) -> None:
         """从环境变量读取 API key，覆盖配置文件中的占位符。"""
         # 顶层 key
@@ -79,6 +82,25 @@ class ProjectConfig:
                 # 也支持通用的 OPENAI_API_KEY
                 if not section_cfg.get("api_key") and os.environ.get("OPENAI_API_KEY"):
                     section_cfg["api_key"] = os.environ.get("OPENAI_API_KEY")
+
+    def _load_wind_jdbc_from_env(self) -> None:
+        """从环境变量读取 Wind JDBC 配置，覆盖配置文件中的占位符。"""
+        wind_cfg = getattr(self, "wind_jdbc", None)
+        if not isinstance(wind_cfg, dict):
+            wind_cfg = {}
+        env_map = {
+            "WIND_JAVA_HOME": "java_home",
+            "WIND_JDBC_JAR": "jdbc_jar",
+            "WIND_JDBC_URL": "jdbc_url",
+            "WIND_JDBC_USER": "username",
+            "WIND_JDBC_PASS": "password",
+        }
+        for env_name, cfg_key in env_map.items():
+            env_val = os.environ.get(env_name)
+            if env_val:
+                wind_cfg[cfg_key] = env_val
+        if wind_cfg:
+            setattr(self, "wind_jdbc", wind_cfg)
 
 cfg = ProjectConfig()
 

@@ -164,6 +164,14 @@ class ResearchAgent:
         """try to load signal from file"""
         try:
             signal_file = self.signal_dir / f'{state["trigger_time"].replace(" ", "_").replace(":", "-")}.json'
+            # 回测模式下，如果 09:00:00 精确文件不存在，复用同一天的其它时间缓存
+            is_backtest = os.environ.get('CONTEST_TRADE_BACKTEST', '').lower() == 'true'
+            if not signal_file.exists() and is_backtest:
+                date_prefix = state["trigger_time"][:10]  # YYYY-MM-DD
+                candidates = sorted(self.signal_dir.glob(f"{date_prefix}_*.json"))
+                if candidates:
+                    signal_file = candidates[0]
+                    print(f"[Backtest reuse] {self.config.agent_name} 使用缓存: {signal_file.name}")
             if signal_file.exists():
                 with open(signal_file, 'r', encoding='utf-8') as f:
                     signal_data = json.load(f)

@@ -1,6 +1,7 @@
 # 敏感信息请通过环境变量注入，例如 export TUSHARE_KEY=xxx
 # 支持的变量名：TUSHARE_KEY, BOCHA_KEY, SERP_KEY, FMP_KEY, FINNHUB_KEY
 # LLM: LLM_API_KEY / LLM_THINKING_API_KEY / VLM_API_KEY / OPENAI_API_KEY
+# Wind JDBC: WIND_JAVA_HOME, WIND_JDBC_JAR, WIND_JDBC_URL, WIND_JDBC_USER, WIND_JDBC_PASS
 
 tushare_key: ""
 
@@ -29,28 +30,53 @@ vlm:
   api_key: ""  # 从 VLM_API_KEY 或 DASHSCOPE_API_KEY 环境变量读取
   model_name: "qwen3.8-max"
 
-# 回测专用：只使用支持历史 trigger_time 的 AKShare 数据源
-# 数据源保证只读取 trigger_time 上一个交易日及之前的数据，无未来信息
+# Wind 数据库 JDBC 配置（ETF 数据源专用，回测使用历史数据）
+# 优先从环境变量读取，此处仅作占位与文档说明
+wind_jdbc:
+  java_home: ""
+  jdbc_jar: ""
+  jdbc_url: ""
+  username: ""
+  password: ""
+
+# ETF 风格轮动标的池
+etf_universe_path: "config/etf_universe.json"
+etf_universe:
+  mode: "wind_auto"
+  benchmark: "510300.SH"
+  benchmark_name: "沪深300ETF华泰柏瑞"
+  asset_classes: ["股票ETF", "债券ETF", "商品ETF", "货币ETF", "多资产ETF"]
+  min_avg_amount: 0
+  min_trade_days: 5
+  liquidity_lookback_days: 45
+
+# 回测专用：只使用支持历史 trigger_time 的数据源
+# Wind ETF 数据源读取 trigger_time 上一个交易日及之前的收盘价与动量，无未来信息
 data_agents_config:
-  - agent_name: "akshare_news_agent"
-    data_source_list: 
-      - "data_source.akshare_news.AkshareNews"
+  - agent_name: "wind_etf_agent"
+    data_source_list:
+      - "data_source.wind_etf.WindETFDataSource"
   - agent_name: "price_market_agent"
-    data_source_list: 
+    data_source_list:
       - "data_source.price_market_akshare.PriceMarketAkshare"
   - agent_name: "hot_money_agent"
-    data_source_list: 
+    data_source_list:
       - "data_source.hot_money_akshare.HotMoneyAkshare"
+  - agent_name: "akshare_news_agent"
+    data_source_list:
+      - "data_source.akshare_news.AkshareNews"
 
 research_agent_config:
-  belief_list_path: "config/belief_list.json"
+  belief_list_path: "config/etf_belief_list.json"
   max_react_step: 10
   output_language: "中文"
   # 回测禁用 web search，只使用可获取历史数据/本地数据的工具
   tools:
+    - "tools.etf_info_wind.etf_info"
+    - "tools.etf_selector_wind.etf_selector"
+    - "tools.etf_price_wind.etf_price"
     - "tools.stock_symbol_search_akshare.stock_symbol_search"
     - "tools.stock_selector_akshare.stock_selector"
-    - "tools.corp_info_akshare.company_financial_info"
     - "tools.price_info_akshare.price_info"
     - "tools.stock_summary_akshare.stock_summary"
     - "tools.final_report.final_report"
@@ -74,16 +100,17 @@ researcher_contest_config:
   mode: "knockout"
   judger_config: llm
   num_judgers: 1
-  window_m: 5
-  window_n: 3
+  window_m: 10
+  window_n: 5
   champion_ratio: 0.30
   eliminated_ratio: 0.30
   # interval=1 表示每层 agent 每轮都运行，仅按表现打 tier 标签
   bench_revival_interval: 1
   eliminated_revival_interval: 1
   fallback_to_judge: False
-  holding_period_by_risk_profile:
-    激进套利者: 1
-    风险偏好者: 1
-    稳健投资者: 5
-    防御套利者: 3
+  # ETF 策略持仓周期
+  holding_period_by_strategy:
+    强势动量: 5
+    趋势确认: 10
+    防御轮动: 10
+    反转修复: 5

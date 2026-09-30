@@ -1,0 +1,4 @@
+interface:
+  display_name: "ContestTrade 中国 ETF"
+  short_description: "用 WindDB 运行中国 ETF 多策略研究与竞赛"
+  default_prompt: "Use $contesttrade-cn-etf to run today’s China ETF multi-strategy research."

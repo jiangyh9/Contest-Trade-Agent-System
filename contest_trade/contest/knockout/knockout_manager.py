@@ -146,6 +146,8 @@ class KnockoutTournament:
                     group=groups.get(aid, "default") if groups else "default",
                     bench_skip_counter=max(0, self.bench_revival_interval - 1),
                 )
+            elif groups:
+                self.score_cards[aid].group = groups.get(aid, "default")
 
     def get_agent_tier(self, agent_id: str) -> str:
         return self.score_cards.get(agent_id, AgentScoreCard(agent_id=agent_id)).tier

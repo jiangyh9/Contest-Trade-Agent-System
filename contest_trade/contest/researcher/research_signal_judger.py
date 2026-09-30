@@ -277,8 +277,13 @@ Format notes:
                 # 从历史信号 belief 推断持仓期
                 holding_days = 1
                 if signal.belief:
-                    for profile, period in getattr(cfg, 'researcher_contest_config', {}).get('holding_period_by_risk_profile', {}).items():
-                        if profile in signal.belief:
+                    contest_cfg = getattr(cfg, 'researcher_contest_config', {})
+                    period_map = contest_cfg.get(
+                        'holding_period_by_strategy',
+                        contest_cfg.get('holding_period_by_risk_profile', {}),
+                    )
+                    for strategy, period in period_map.items():
+                        if strategy in signal.belief:
                             holding_days = period
                             break
                 if signal.has_contest_data() and 'reward' in signal.contest_data:

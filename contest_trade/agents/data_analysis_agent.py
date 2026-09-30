@@ -7,6 +7,7 @@ Original Documents → Batch Processing → LLM Intelligent Filtering → Conten
 import re
 import json
 import traceback
+import os
 import asyncio
 import importlib
 import pandas as pd
@@ -182,6 +183,14 @@ class DataAnalysisAgent:
         """try to load factor from file"""
         try:
             factor_file = self.factor_dir / f'{state["trigger_time"].replace(" ", "_").replace(":", "-")}.json'
+            # 回测模式下，如果 09:00:00 精确文件不存在，复用同一天的其它时间缓存
+            is_backtest = os.environ.get('CONTEST_TRADE_BACKTEST', '').lower() == 'true'
+            if not factor_file.exists() and is_backtest:
+                date_prefix = state["trigger_time"][:10]  # YYYY-MM-DD
+                candidates = sorted(self.factor_dir.glob(f"{date_prefix}_*.json"))
+                if candidates:
+                    factor_file = candidates[0]
+                    print(f"[Backtest reuse] {self.config.agent_name} 使用缓存: {factor_file.name}")
             if factor_file.exists():
                 with open(factor_file, 'r', encoding='utf-8') as f:
                     factor_data = json.load(f)

@@ -54,7 +54,7 @@ def _get_agent_config():
             agent_status[agent_name] = "pending"
     
     # 从belief_list.json获取研究代理数量
-    belief_list_path = PROJECT_ROOT / "config" / "belief_list.json"
+    belief_list_path = PROJECT_ROOT / cfg.research_agent_config["belief_list_path"]
 
     with open(belief_list_path, 'r', encoding='utf-8') as f:
         belief_list = json.load(f)
@@ -87,7 +87,7 @@ class ContestTradeDisplay:
     @staticmethod
     def _extract_risk_profile_from_belief(belief: str) -> str:
         """从 belief 文本中提取风险画像"""
-        profiles = ["风险偏好者", "稳健投资者", "激进套利者", "防御套利者"]
+        profiles = ["强势动量", "趋势确认", "防御轮动", "反转修复"]
         for profile in profiles:
             if profile in belief:
                 return profile
@@ -104,7 +104,8 @@ class ContestTradeDisplay:
             # Research agent 尝试从 belief 中提取风险画像
             try:
                 from contest_trade.config.config import PROJECT_ROOT
-                belief_list_path = PROJECT_ROOT / "config" / "belief_list.json"
+                from contest_trade.config.config import cfg
+                belief_list_path = PROJECT_ROOT / cfg.research_agent_config["belief_list_path"]
                 with open(belief_list_path, 'r', encoding='utf-8') as f:
                     belief_list = json.load(f)
                 idx = int(agent_name.split("_")[-1])
@@ -414,7 +415,7 @@ class ContestTradeDisplay:
                 summary_text.append(get_text(f"\n🎯 有效信号: {len(valid_signals)}", f"\n🎯 Valid Signals: {len(valid_signals)}"), style="bold red")
                 
                 # 按 risk_profile 分组
-                profile_order = ["风险偏好者", "稳健投资者", "激进套利者", "防御套利者"]
+                profile_order = ["强势动量", "趋势确认", "防御轮动", "反转修复"]
                 grouped = {p: [] for p in profile_order}
                 for signal in valid_signals:
                     profile = signal.get('risk_profile', '未指定')

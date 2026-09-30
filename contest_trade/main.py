@@ -49,13 +49,16 @@ class SimpleTradeCompany:
         with open(belief_list_path, 'r', encoding='utf-8') as f:
             belief_list = json.load(f)
 
-        # 读取不同风险画像的持仓期配置
+        # 读取不同策略来源的持仓期配置
         research_contest_cfg = getattr(cfg, "researcher_contest_config", {}) or {}
-        holding_period_map = research_contest_cfg.get("holding_period_by_risk_profile", {})
+        holding_period_map = research_contest_cfg.get(
+            "holding_period_by_strategy",
+            research_contest_cfg.get("holding_period_by_risk_profile", {}),
+        )
 
         for agent_config_idx, belief in enumerate(belief_list):
-            risk_profile = self._extract_risk_profile_from_belief(belief)
-            holding_period = holding_period_map.get(risk_profile, 1)
+            strategy = self._extract_strategy_from_belief(belief)
+            holding_period = holding_period_map.get(strategy, 1)
             custom_config = ResearchAgentConfig(
                 agent_name=f"agent_{agent_config_idx}",
                 belief=belief,
@@ -308,12 +311,12 @@ class SimpleTradeCompany:
         }
 
     @staticmethod
-    def _extract_risk_profile_from_belief(belief: str) -> str:
-        """从 belief 文本中提取风险画像关键词"""
-        profiles = ["风险偏好者", "稳健投资者", "激进套利者", "防御套利者"]
-        for profile in profiles:
-            if profile in belief:
-                return profile
+    def _extract_strategy_from_belief(belief: str) -> str:
+        """从 belief 文本中提取独立策略来源。"""
+        strategies = ["强势动量", "趋势确认", "防御轮动", "反转修复"]
+        for strategy in strategies:
+            if strategy in belief:
+                return strategy
         return "default"
 
     # 辅助函数

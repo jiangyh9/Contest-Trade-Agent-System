@@ -20,3 +20,5 @@ crawl4ai
 lightgbm
 streamlit
 plotly
+JayDeBeApi
+JPype1
